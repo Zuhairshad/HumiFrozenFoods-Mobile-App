@@ -54,7 +54,8 @@ export function ProductHeaderButtons({ product }: { product: Product }) {
       <View style={styles.right}>
         <Animated.View style={heartStyle}>
           <RoundButton
-            icon={isFav ? 'heart.fill' : 'heart'}
+            icon="heart"
+            filled={isFav}
             size={44}
             material="glass"
             onPress={onFav}

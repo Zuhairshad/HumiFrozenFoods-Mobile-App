@@ -28,6 +28,6 @@ export function corsPolicy(allowedOrigins: readonly string[]): MiddlewareHandler
       throw new ForbiddenError('Origin not allowed', 'origin_not_allowed');
     }
     c.header('Vary', 'Origin', { append: true });
-    await handler(c, next);
+    return handler(c, next);
   };
 }

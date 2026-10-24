@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useColorScheme,
   useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -24,6 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '@/hooks/useCart';
+import { useTheme } from '@/hooks/useTheme';
 import { haptics } from '@/hooks/useHaptics';
 import { TabIcon } from './TabIcon';
 
@@ -115,7 +115,7 @@ export function GlassTabBar({ state, descriptors, emitter, navigateToTab, insets
   const safe = useSafeAreaInsets();
   const bottomInset = navInsets?.bottom ?? safe.bottom;
   const { width: windowWidth } = useWindowDimensions();
-  const scheme = useColorScheme();
+  const { isDark } = useTheme();
   const reducedMotion = useReducedMotion();
   const glass = useGlassCapability();
   const reduceTransparency = useReduceTransparency();
@@ -185,7 +185,7 @@ export function GlassTabBar({ state, descriptors, emitter, navigateToTab, insets
   );
 
   const solid = reduceTransparency || Platform.OS === 'android';
-  const showShadow = scheme !== 'dark';
+  const showShadow = !isDark;
 
   return (
     <Animated.View

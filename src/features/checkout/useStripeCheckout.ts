@@ -3,6 +3,7 @@ import { fetchOrder } from '@/lib/api/orders-client';
 import { isGatewayError } from '@/lib/api/errors';
 import { getStripeGateway, makeIdempotencyKey, type PaymentIntentResult } from '@/lib/api/stripe-gateway';
 import type { OrderDraft, PricingDto } from '@/lib/api/types';
+import { formatPrice } from '@/lib/format';
 import { useOrdersStore, type StoredOrder } from '@/store/orders';
 import { useTheme } from '@/hooks/useTheme';
 import type { PaymentSheetBilling } from './paymentSheetTypes';
@@ -20,6 +21,7 @@ export type CheckoutStatus =
 
 export type CheckoutErrorKind =
   | 'network' // offline / timeout; safe to retry
+  | 'price_changed' // server total differs from what the user was shown; nothing charged, retry to accept
   | 'validation' // server rejected the draft (bad promo, unavailable product, ...)
   | 'server'
   | 'declined' // card declined or payment failed in the sheet
@@ -53,6 +55,11 @@ interface Session {
   fingerprint: string;
   idempotencyKey: string;
   intent?: PaymentIntentResult;
+}
+
+export interface PayOptions {
+  /** Total in pence the user was shown. A different server total aborts before PaymentSheet opens. */
+  expectedTotalPence?: number;
 }
 
 const penceToPounds = (p: number) => Math.round(p) / 100;
@@ -114,6 +121,8 @@ export function useStripeCheckout() {
   const addOrder = useOrdersStore((s) => s.addOrder);
 
   const [state, setState] = useState<CheckoutState>(IDLE);
+  /** Latest server-side pricing for the current draft (source of truth for displayed totals). */
+  const [quote, setQuote] = useState<PricingDto | null>(null);
   const inFlight = useRef<Promise<CheckoutState> | null>(null);
   const session = useRef<Session | null>(null);
   const colorsRef = useRef({ c, isDark });
@@ -122,7 +131,7 @@ export function useStripeCheckout() {
   }, [c, isDark]);
 
   const run = useCallback(
-    async (draft: OrderDraft): Promise<CheckoutState> => {
+    async (draft: OrderDraft, opts?: PayOptions): Promise<CheckoutState> => {
       const settle = (next: CheckoutState): CheckoutState => {
         setState(next);
         return next;
@@ -149,6 +158,19 @@ export function useStripeCheckout() {
       try {
         setState({ status: 'creating' });
         const intent = (current.intent ??= await gateway.createPaymentIntent(draft, { idempotencyKey: current.idempotencyKey }));
+
+        setQuote(intent.pricing);
+        if (opts?.expectedTotalPence !== undefined && intent.pricing.totalPence !== opts.expectedTotalPence) {
+          return settle({
+            status: 'failed',
+            error: {
+              kind: 'price_changed',
+              title: 'Price updated',
+              message: `Your total is now ${formatPrice(penceToPounds(intent.pricing.totalPence))}. Nothing has been charged. Tap Pay to continue.`,
+              retryable: true,
+            },
+          });
+        }
 
         let paymentStatus: StoredOrder['paymentStatus'] = 'demo';
         if (!demo) {
@@ -219,9 +241,9 @@ export function useStripeCheckout() {
   );
 
   const pay = useCallback(
-    (draft: OrderDraft): Promise<CheckoutState> => {
+    (draft: OrderDraft, opts?: PayOptions): Promise<CheckoutState> => {
       if (inFlight.current) return inFlight.current;
-      const p = run(draft).finally(() => {
+      const p = run(draft, opts).finally(() => {
         inFlight.current = null;
       });
       inFlight.current = p;
@@ -235,5 +257,5 @@ export function useStripeCheckout() {
   }, []);
 
   const busy = state.status === 'creating' || state.status === 'presenting' || state.status === 'confirming';
-  return { pay, state, reset, busy, demo };
+  return { pay, state, reset, busy, demo, quote };
 }

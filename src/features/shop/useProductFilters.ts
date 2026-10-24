@@ -52,6 +52,7 @@ export function useProductFilters() {
   const setCategory = useCallback((category: CategoryFilter) => update({ category }), [update]);
   const setSort = useCallback((sort: SortKey) => update({ sort }), [update]);
   const setReady = useCallback((ready: ReadyIn) => update({ ready }), [update]);
+  const setQuery = useCallback((q: string) => update({ q }), [update]);
   const toggleDiet = useCallback(
     (diet: Diet) => router.setParams(filtersToParams(toggleDietIn(filters, diet))),
     [filters],
@@ -76,6 +77,7 @@ export function useProductFilters() {
     setCategory,
     setSort,
     setReady,
+    setQuery,
     toggleDiet,
     clearRefinements,
     reset,

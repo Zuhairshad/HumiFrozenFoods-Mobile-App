@@ -4,8 +4,9 @@ import { z } from 'zod';
 import { createLogger } from '../../../src/lib/logger.js';
 import { jsonBody } from '../../../src/lib/validation.js';
 import type { AppEnv } from '../../../src/types.js';
-import { captureLogs, errorBody, testApp, testDeps } from '../helpers.js';
-import { createApp } from '../../../src/app.js';
+import { captureLogs, errorBody, testApp } from '../helpers.js';
+import { createErrorHandler } from '../../../src/lib/http.js';
+import { healthRoutes } from '../../../src/routes/health.js';
 
 const mount = (app: Hono<AppEnv>) => {
   app.get('/boom', () => {
@@ -48,20 +49,17 @@ describe('health endpoints', () => {
   });
 
   it('GET /readyz is 503 when the ping hangs', async () => {
-    const app = createApp(testDeps({ database: { ping: () => new Promise<void>(() => undefined) } }));
-    // readiness timeout is 2s by default; use the exported factory for a fast test
-    const { healthRoutes } = await import('../../../src/routes/health.js');
-    const fast = healthRoutes({ ping: () => new Promise<void>(() => undefined) }, 20);
     const host = new Hono<AppEnv>();
     host.use(async (c, next) => {
-      c.set('requestId', 'r');
+      c.set('requestId', 'req-test-0001');
       c.set('logger', createLogger({ level: 'silent' }));
       await next();
     });
-    host.route('/', fast);
-    host.onError((_e, c) => c.json({}, 503));
-    expect((await host.request('/readyz')).status).toBe(503);
-    expect(app).toBeDefined();
+    host.route('/', healthRoutes({ ping: () => new Promise<void>(() => undefined) }, 20));
+    host.onError(createErrorHandler(true));
+    const res = await host.request('/readyz');
+    expect(res.status).toBe(503);
+    expect((await errorBody(res)).error.code).toBe('not_ready');
   });
 
   it('health probes are not rate limited', async () => {

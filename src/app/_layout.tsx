@@ -15,7 +15,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '@/components/ui/Toast';
 import { BrandSplash, useAppReady } from '@/features/shell';
 import { AppStripeProvider } from '@/lib/stripe/StripeProvider';
-import { useTheme } from '@/theme';
+import { useTheme } from '@/hooks/useTheme';
 
 // Keep the native splash up until the brand splash overlay has laid out.
 SplashScreen.preventAutoHideAsync().catch(() => {});

@@ -67,7 +67,7 @@ export function BuyBar({ product }: { product: Product }) {
           <Animated.View style={[styles.cta, popStyle]}>
             <Button
               title={added ? 'Added' : `Add to Cart · ${total}`}
-              icon={added ? 'checkmark.circle.fill' : undefined}
+              icon={added ? 'checkmark.circle' : undefined}
               size="lg"
               fullWidth
               onPress={onAdd}
