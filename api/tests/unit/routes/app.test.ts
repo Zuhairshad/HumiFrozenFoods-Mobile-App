@@ -166,12 +166,12 @@ describe('request pipeline', () => {
     const app = testApp(
       (a) => {
         a.get('/slow', async (c) => {
-          await new Promise((r) => setTimeout(r, 300));
+          await new Promise((r) => setTimeout(r, 700));
           return c.json({});
         });
       },
       {},
-      { REQUEST_TIMEOUT_MS: '100' },
+      { REQUEST_TIMEOUT_MS: '150' },
     );
     expect((await app.request('/slow')).status).toBe(504);
   });

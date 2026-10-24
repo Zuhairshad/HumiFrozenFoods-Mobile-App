@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentRef } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { router, Stack, usePreventRemove } from 'expo-router';
@@ -9,6 +9,7 @@ import {
   buildOrderDraft,
   CheckoutForm,
   EMPTY_FORM,
+  getDeliveryDays,
   validateField,
   validateForm,
   type CheckoutFormValues,
@@ -19,7 +20,6 @@ import {
 } from '@/features/checkout';
 import { useCart } from '@/hooks/useCart';
 import { useTheme } from '@/hooks/useTheme';
-import { formatPrice } from '@/lib/format';
 
 export default function CheckoutScreen() {
   const insets = useSafeAreaInsets();
@@ -30,10 +30,11 @@ export default function CheckoutScreen() {
 
   const [values, setValues] = useState<CheckoutFormValues>(EMPTY_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [slot, setSlot] = useState<SlotSelection>({ date: null, window: null });
+  const [slot, setSlot] = useState<SlotSelection>(() => ({ date: getDeliveryDays()[0]?.key ?? null, window: null }));
   const [done, setDone] = useState(false);
+  const retry = useRef<() => void>(() => {});
 
-  const dirty = useMemo(() => Object.values(values).some((v) => v.trim().length > 0) || slot.date !== null, [values, slot]);
+  const dirty = useMemo(() => Object.values(values).some((v) => v.trim().length > 0) || slot.window !== null, [values, slot]);
   const busy = checkout.busy;
 
   const disablePrevention = usePreventRemove(!done && (dirty || busy), ({ repeat }) => {
@@ -94,12 +95,16 @@ export default function CheckoutScreen() {
             ? [{ text: 'OK', style: 'default' as const }]
             : [
                 { text: 'Cancel', style: 'cancel' as const },
-                { text: 'Try Again', onPress: () => void submit() },
+                { text: 'Try Again', onPress: () => retry.current() },
               ];
       Alert.alert(err.title, err.message, buttons);
     }
     // 'cancelled' returns quietly to idle: no alert.
   }, [cart, checkout, disablePrevention, previewPence, showQuote, slot, values]);
+
+  useEffect(() => {
+    retry.current = () => void submit();
+  }, [submit]);
 
   const onCancel = useCallback(() => router.back(), []);
 

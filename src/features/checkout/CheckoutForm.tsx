@@ -1,7 +1,6 @@
-import { useMemo, useRef, useState, type ComponentRef, type RefObject } from 'react';
+import { useMemo, useRef, useState, type ComponentRef } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { AppText, FadeImage, Icon, ListSection, PressableScale } from '@/components/ui';
-import { useTheme } from '@/hooks/useTheme';
 import { formatPrice } from '@/lib/format';
 import type { CartLineWithProduct } from '@/hooks/useCart';
 import { DaySegment } from './DaySegment';
@@ -41,7 +40,6 @@ export function CheckoutForm({
   itemCount,
   total,
 }: CheckoutFormProps) {
-  const { c } = useTheme();
   const phone = useRef<ComponentRef<typeof TextInput>>(null);
   const name = useRef<ComponentRef<typeof TextInput>>(null);
   const line1 = useRef<ComponentRef<typeof TextInput>>(null);
@@ -113,7 +111,7 @@ export function CheckoutForm({
         />
         <FieldRow
           inputRef={line1}
-          label="Address line 1"
+          label="Street"
           value={values.line1}
           onChangeText={(t) => onChange('line1', t)}
           onBlur={() => onBlurField('line1')}
@@ -127,7 +125,7 @@ export function CheckoutForm({
         />
         <FieldRow
           inputRef={line2}
-          label="Address line 2"
+          label="Flat / unit"
           value={values.line2}
           onChangeText={(t) => onChange('line2', t)}
           placeholder="Optional"
