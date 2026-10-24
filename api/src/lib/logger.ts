@@ -26,13 +26,15 @@ const SENSITIVE_KEYS = [
   'postcode',
 ] as const;
 
-function bracket(key: string): string {
-  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : `["${key}"]`;
+function pathFor(prefix: string, key: string): string {
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return `${prefix}${key}`;
+  // Keys such as "set-cookie" need bracket notation, which attaches without a dot.
+  return `${prefix.replace(/\.$/, '')}["${key}"]`;
 }
 
 export function buildRedactPaths(): string[] {
   const prefixes = ['', '*.', '*.*.', '*.*.*.'];
-  return SENSITIVE_KEYS.flatMap((key) => prefixes.map((p) => `${p}${bracket(key)}`));
+  return SENSITIVE_KEYS.flatMap((key) => prefixes.map((p) => pathFor(p, key)));
 }
 
 export interface LoggerConfig {

@@ -1,3 +1,5 @@
+import { HTTPException } from 'hono/http-exception';
+
 export type ErrorStatus = 400 | 401 | 403 | 404 | 405 | 409 | 413 | 415 | 429 | 500 | 503 | 504;
 
 export interface ErrorEnvelope {
@@ -126,19 +128,6 @@ const STATUS_CODES: Readonly<Record<number, string>> = {
   429: 'rate_limited',
 };
 
-/** Shape of hono's HTTPException, matched structurally to avoid coupling to its class identity. */
-function readHttpStatus(err: unknown): { status: number; message: string } | undefined {
-  if (
-    err instanceof Error &&
-    err.name === 'HTTPException' &&
-    'status' in err &&
-    typeof err.status === 'number'
-  ) {
-    return { status: err.status, message: err.message };
-  }
-  return undefined;
-}
-
 /**
  * Collapses anything thrown into an AppError. Unknown errors become a generic
  * InternalError so internals (driver messages, stacks) never reach the client.
@@ -146,10 +135,12 @@ function readHttpStatus(err: unknown): { status: number; message: string } | und
 export function normalizeError(err: unknown): AppError {
   if (err instanceof AppError) return err;
 
-  const http = readHttpStatus(err);
-  if (http && http.status >= 400 && http.status < 500) {
-    const status = http.status as ErrorStatus;
-    return new AppError(status, STATUS_CODES[http.status] ?? 'bad_request', http.message || 'Bad request');
+  if (err instanceof HTTPException && err.status >= 400 && err.status < 500) {
+    // Statuses outside our vocabulary collapse to a plain 400 so clients only see documented codes.
+    const code = STATUS_CODES[err.status];
+    return code
+      ? new AppError(err.status as ErrorStatus, code, err.message || 'Bad request')
+      : new AppError(400, 'bad_request', err.message || 'Bad request');
   }
 
   return new InternalError(err);

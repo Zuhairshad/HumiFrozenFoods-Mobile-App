@@ -1,107 +1,67 @@
-import { useEffect } from 'react';
-import { Share, StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Extrapolation,
-  SharedValue,
   interpolate,
   useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withSpring,
+  useReducedMotion,
+  type SharedValue,
 } from 'react-native-reanimated';
-import { FadeImage, IconButton } from '@/components/ui';
-import { haptics } from '@/hooks';
-import { useFavoritesStore } from '@/store/favorites';
-import { gradients, gutter } from '@/theme';
-import type { Product } from '@/types';
+import { FadeImage } from '@/components/ui';
+import { useTheme } from '@/hooks/useTheme';
 
-export const HERO_HEIGHT = 440;
+/** Photo height as a multiple of screen width (spec 5.4). */
+export const HERO_ASPECT = 1.07;
+/** How far the content sheet overlaps the photo. */
+export const SHEET_OVERLAP = 28;
+
+export function useHeroHeight(): number {
+  const { width } = useWindowDimensions();
+  return Math.round(width * HERO_ASPECT);
+}
 
 interface ProductHeroProps {
-  product: Product;
+  uri: string;
   scrollY: SharedValue<number>;
 }
 
-/** Parallax image, rendered behind the scroll view. */
-export function HeroImage({ product, scrollY }: ProductHeroProps) {
-  const imageStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(scrollY.value, [-HERO_HEIGHT, 0, HERO_HEIGHT], [-HERO_HEIGHT / 2, 0, HERO_HEIGHT * 0.4], Extrapolation.CLAMP) },
-      { scale: interpolate(scrollY.value, [-HERO_HEIGHT, 0], [2.2, 1], Extrapolation.CLAMP) },
-    ],
-  }));
-  return (
-    <Animated.View style={[styles.hero, imageStyle]} pointerEvents="none">
-      <FadeImage uri={product.image} style={StyleSheet.absoluteFill} contentFit="cover" />
-      <LinearGradient colors={gradients.scrimTop} style={styles.topScrim} />
-    </Animated.View>
-  );
-}
+/**
+ * Full-bleed photo rendered behind the scroll view. Pulling down stretches it
+ * (anchored to the top); scrolling up moves it at 0.6x so the sheet slides over it.
+ */
+export function ProductHero({ uri, scrollY }: ProductHeroProps) {
+  const { c } = useTheme();
+  const height = useHeroHeight();
+  const reduceMotion = useReducedMotion();
 
-/** Floating glass controls: back, favourite, share. */
-export function HeroActions({ product, scrollY }: ProductHeroProps) {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const isFav = useFavoritesStore((s) => s.ids.includes(product.id));
-  const toggle = useFavoritesStore((s) => s.toggle);
-  const pop = useSharedValue(1);
-
-  const rowStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(scrollY.value, [-100, 0], [60, 0], Extrapolation.CLAMP) }],
-  }));
-  const heartStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
-
-  useEffect(() => {
-    pop.set(1);
-  }, [product.id, pop]);
-
-  const onFav = () => {
-    const adding = !isFav;
-    toggle(product.id);
-    haptics[adding ? 'success' : 'light']();
-    pop.set(withSequence(withSpring(1.4, { damping: 6, stiffness: 400 }), withSpring(1, { damping: 8, stiffness: 260 })));
-  };
-
-  const onShare = () => {
-    Share.share({ message: `${product.name} from Humi's Frozen Foods — https://humisfrozenfoods.com` }).catch(() => {});
-  };
-
-  const onBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/');
-  };
+  const imageStyle = useAnimatedStyle(() => {
+    if (reduceMotion) return {};
+    const y = scrollY.get();
+    const stretch = Math.max(-y, 0);
+    const scale = 1 + stretch / height;
+    return {
+      transform: [
+        { translateY: (height * (scale - 1)) / 2 - interpolate(y, [0, height], [0, height * 0.6], Extrapolation.CLAMP) },
+        { scale },
+      ],
+    };
+  });
 
   return (
-    <Animated.View style={[styles.actions, { top: insets.top + 8 }, rowStyle]} pointerEvents="box-none">
-      <IconButton icon="chevron-back" variant="glass" onPress={onBack} accessibilityLabel="Go back" />
-      <View style={styles.right}>
-        <Animated.View style={heartStyle}>
-          <IconButton
-            icon={isFav ? 'heart' : 'heart-outline'}
-            variant="glass"
-            onPress={onFav}
-            accessibilityLabel={isFav ? 'Remove from favourites' : 'Add to favourites'}
-          />
-        </Animated.View>
-        <IconButton icon="share-outline" variant="glass" onPress={onShare} accessibilityLabel="Share product" />
-      </View>
+    <Animated.View style={[styles.hero, { height, backgroundColor: c.fill }]} pointerEvents="none">
+      <Animated.View style={[StyleSheet.absoluteFill, imageStyle]}>
+        <FadeImage uri={uri} style={StyleSheet.absoluteFill} contentFit="cover" width={1080} />
+      </Animated.View>
+      <LinearGradient
+        colors={[c.scrim, 'rgba(5,12,12,0)']}
+        style={styles.topScrim}
+        pointerEvents="none"
+      />
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { position: 'absolute', top: 0, left: 0, right: 0, height: HERO_HEIGHT, overflow: 'hidden' },
-  topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: 140 },
-  actions: {
-    position: 'absolute',
-    left: gutter,
-    right: gutter,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    zIndex: 10,
-  },
-  right: { flexDirection: 'row', gap: 10 },
+  hero: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden' },
+  topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: 90, opacity: 0.45 },
 });

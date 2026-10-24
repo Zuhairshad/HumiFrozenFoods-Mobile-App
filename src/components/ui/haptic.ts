@@ -1,15 +1,20 @@
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
-/** Internal light-impact helper; no-op on web. */
-export function tapHaptic(kind: 'light' | 'medium' | 'selection' = 'light') {
+export type HapticKind = 'selection' | 'light' | 'success' | 'warning';
+
+/** Fire-and-forget haptic; no-op on web and when unavailable (2.6, 7.5.9). */
+export function fireHaptic(kind: HapticKind): void {
   if (Platform.OS === 'web') return;
   try {
-    if (kind === 'selection') void Haptics.selectionAsync();
+    let p: Promise<void>;
+    if (kind === 'selection') p = Haptics.selectionAsync();
+    else if (kind === 'light') p = Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     else
-      void Haptics.impactAsync(
-        kind === 'medium' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light,
+      p = Haptics.notificationAsync(
+        kind === 'success' ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning,
       );
+    p.catch(() => {});
   } catch {
     // haptics unavailable
   }

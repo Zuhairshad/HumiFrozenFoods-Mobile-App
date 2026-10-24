@@ -1,12 +1,11 @@
 import { StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { colors, radii, spacing } from '@/theme';
+
 import { AppText } from './AppText';
 import { Button } from './Button';
-import type { IoniconName } from './types';
+import { Icon, IconName } from './Icon';
 
 export interface EmptyStateProps {
-  icon: IoniconName;
+  icon: IconName;
   title: string;
   message?: string;
   actionLabel?: string;
@@ -15,23 +14,19 @@ export interface EmptyStateProps {
 
 export function EmptyState({ icon, title, message, actionLabel, onAction }: EmptyStateProps) {
   return (
-    <View style={styles.wrap}>
-      <View style={styles.halo}>
-        <View style={styles.disc}>
-          <Ionicons name={icon} size={36} color={colors.teal} />
-        </View>
-      </View>
-      <AppText variant="h2" align="center">
+    <View style={styles.wrap} accessible={false}>
+      <Icon name={icon} size={48} color="labelTertiary" />
+      <AppText variant="title3" align="center" accessibilityRole="header">
         {title}
       </AppText>
       {message ? (
-        <AppText variant="body" color="muted" align="center" style={styles.msg}>
+        <AppText variant="callout" color="labelSecondary" align="center">
           {message}
         </AppText>
       ) : null}
       {actionLabel && onAction ? (
         <View style={styles.action}>
-          <Button title={actionLabel} onPress={onAction} variant="gold" />
+          <Button title={actionLabel} onPress={onAction} variant="tinted" />
         </View>
       ) : null}
     </View>
@@ -39,24 +34,6 @@ export function EmptyState({ icon, title, message, actionLabel, onAction }: Empt
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center', paddingHorizontal: spacing.xxxl, paddingVertical: spacing.huge, gap: spacing.sm },
-  halo: {
-    width: 120,
-    height: 120,
-    borderRadius: radii.pill,
-    backgroundColor: colors.tealMist,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.lg,
-  },
-  disc: {
-    width: 80,
-    height: 80,
-    borderRadius: radii.pill,
-    backgroundColor: colors.tealSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  msg: { maxWidth: 300 },
-  action: { marginTop: spacing.xl },
+  wrap: { alignItems: 'center', gap: 8, paddingHorizontal: 32, paddingVertical: 48 },
+  action: { marginTop: 12 },
 });

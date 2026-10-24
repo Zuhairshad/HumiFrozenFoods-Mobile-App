@@ -73,25 +73,23 @@ export function multiply(unit: Pence, quantity: number): Pence {
 
 function divideRound(numerator: bigint, denominator: bigint, mode: Rounding): bigint {
   if (denominator <= 0n) throw new RangeError('Denominator must be positive');
-  const quotient = numerator / denominator; // truncates toward zero
-  const remainder = numerator % denominator;
-  if (remainder === 0n) return quotient;
   const negative = numerator < 0n;
-  const floor = negative ? quotient - 1n : quotient;
-  switch (mode) {
-    case 'floor':
-      return floor;
-    case 'ceil':
-      return floor + 1n;
-    case 'half-up':
-    case 'half-even': {
-      const twice = (negative ? -remainder : remainder) * 2n;
-      if (twice !== denominator) return twice > denominator ? floor + 1n : floor;
-      // Exactly half. half-up rounds away from zero; half-even picks the even neighbour.
-      if (mode === 'half-up') return negative ? floor : floor + 1n;
-      return floor % 2n === 0n ? floor : floor + 1n;
-    }
+  const magnitude = negative ? -numerator : numerator;
+  const quotient = magnitude / denominator;
+  const remainder = magnitude % denominator;
+  if (remainder === 0n) return negative ? -quotient : quotient;
+
+  let rounded: bigint; // rounded magnitude
+  if (mode === 'floor') {
+    rounded = negative ? quotient + 1n : quotient;
+  } else if (mode === 'ceil') {
+    rounded = negative ? quotient : quotient + 1n;
+  } else {
+    const twice = remainder * 2n;
+    const roundUp = twice > denominator || (twice === denominator && (mode === 'half-up' || quotient % 2n === 1n));
+    rounded = roundUp ? quotient + 1n : quotient;
   }
+  return negative ? -rounded : rounded;
 }
 
 /** value * basisPoints / 10_000 (100 bps = 1%), rounded explicitly. */
