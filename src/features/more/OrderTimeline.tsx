@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   wrap: { paddingVertical: spacing.sm },
   // Line runs between the centres of the first and last dots (each step is 25% wide).
   trackWrap: { position: 'absolute', top: spacing.sm + DOT / 2 - 2, left: '12.5%', right: '12.5%', height: 4 },
-  track: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.sand, borderRadius: radii.pill },
+  track: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: colors.sand, borderRadius: radii.pill },
   fill: { height: 4, backgroundColor: colors.gold, borderRadius: radii.pill },
   steps: { flexDirection: 'row' },
   step: { flex: 1, alignItems: 'center', gap: spacing.xs },
