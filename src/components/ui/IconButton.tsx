@@ -25,7 +25,7 @@ export function IconButton({
   accessibilityLabel,
 }: IconButtonProps) {
   const iconColor =
-  const box = { width: size, height: size, borderRadius: radii.pill };
+    variant === 'gold' ? colors.tealInk : variant === 'dark' || variant === 'glass' ? colors.white : colors.teal;
 
   return (
     <PressableScale
@@ -35,7 +35,8 @@ export function IconButton({
       accessibilityLabel={accessibilityLabel}
       style={[
         styles.base,
-        box,
+        { width: size, height: size, borderRadius: radii.pill },
+        variant === 'solid' && { backgroundColor: colors.white, ...shadows.sm },
         variant === 'dark' && { backgroundColor: colors.tealInk },
         variant === 'gold' && shadows.gold,
         variant === 'glass' && styles.glass,
@@ -59,6 +60,7 @@ export function IconButton({
       <Ionicons name={icon} size={Math.round(size * 0.48)} color={iconColor} />
       {badge && badge > 0 ? (
         <View style={styles.badge}>
+          <AppText variant="overline" color="white" style={styles.badgeText}>
             {badge > 99 ? '99+' : String(badge)}
           </AppText>
         </View>
