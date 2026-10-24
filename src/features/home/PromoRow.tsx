@@ -35,7 +35,7 @@ export const PromoRow = memo(function PromoRow() {
 
   return (
     <View style={[styles.row, { backgroundColor: c.tintSoft }]}>
-      <Icon name="tag.fill" size={20} color={c.tint} />
+      <Icon name="tag" fill size={20} color={c.tint} />
       <AppText variant="subhead" numberOfLines={1} style={styles.text}>
         {`${PROMO_PERCENT}% off your first order`}
       </AppText>

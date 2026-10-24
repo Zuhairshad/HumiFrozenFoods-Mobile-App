@@ -1,9 +1,8 @@
 import { memo, useCallback } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { AppText, FadeImage, PressableScale } from '@/components/ui';
+import { AppText, FadeImage, PressableScale, useToast } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
-import { useToast } from '@/components/ui';
 import { formatPrice } from '@/lib/format';
 import { useCartStore } from '@/store/cart';
 import type { Product } from '@/types';
