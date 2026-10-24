@@ -12,10 +12,10 @@ app.use(async (c, next) => {
   c.set('logger', createLogger({ level: 'silent' }));
   await next();
 });
-app.use(requestTimeout(30));
+app.use(requestTimeout(150));
 app.get('/fast', (c) => c.json({ ok: true }));
 app.get('/slow', async (c) => {
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  await new Promise((resolve) => setTimeout(resolve, 600));
   return c.json({ ok: true });
 });
 app.get('/throws', () => {

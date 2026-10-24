@@ -93,7 +93,7 @@ export interface SiteOptions {
   useCashOnDelivery: boolean; // [OBS] true
   useEnableGateway: boolean; // [OBS] true
   stripeCardOnly: boolean; // [OBS] false
-  paymentGateway: Array<{ _id: ObjectIdString; name: string; title: string }>; // [OBS] stripe, cod
+  paymentGateway: { _id: ObjectIdString; name: string; title: string }[]; // [OBS] stripe, cod
   guestCheckout: boolean; // [OBS] true  (page /checkout/guest redirects home if false)
   enableCoupons: boolean; // [OBS] true
   freeShipping: boolean; // [OBS] false
@@ -105,7 +105,7 @@ export interface SiteOptions {
   minimumOrderAmount: number; // [OBS] 0
   enableB2B: boolean; // [OBS] true
   minB2BOrderAmount: number; // [OBS] 500
-  deliveryTime: Array<{ _id: ObjectIdString; title: string; description: string }>; // [OBS] 5 slots; NOT sent by guest checkout
+  deliveryTime: { _id: ObjectIdString; title: string; description: string }[]; // [OBS] 5 slots; NOT sent by guest checkout
   currencyToWalletRatio: number;
   signupPoints: number;
   isUnderMaintenance: boolean;
@@ -114,7 +114,7 @@ export interface SiteOptions {
     website: string;
     emailAddress: string;
     location: { city: string; state: string; country: string; zip: string; formattedAddress: string; street_address: string; lat: number; lng: number };
-    socials: Array<{ _id: ObjectIdString; icon: string; url: string }>;
+    socials: { _id: ObjectIdString; icon: string; url: string }[];
   };
   seo: Record<string, string>;
   logo: ImageSet;
@@ -154,7 +154,7 @@ export interface B2BPricing {
   price?: number;
   sale_price?: number;
   min_quantity: number;
-  tier_prices: Array<{ min_quantity: number; price: number }>; // [INF] element shape from client code (tier.min_quantity, tier.price)
+  tier_prices: { min_quantity: number; price: number }[]; // [INF] element shape from client code (tier.min_quantity, tier.price)
 }
 
 /** [OBS] Public product as returned by GET /products and GET /products/:slugOrId. */
@@ -215,8 +215,8 @@ export interface ApiType {
   language: string;
   translated_languages: string[];
   settings: { _id: ObjectIdString; isHome: boolean; layoutType: string; productCard: string };
-  promotional_sliders: Array<{ _id: ObjectIdString } & ImageSet>;
-  banners: Array<{ _id: ObjectIdString; title: string; description: string; image: ImageSet }>;
+  promotional_sliders: ({ _id: ObjectIdString } & ImageSet)[];
+  banners: { _id: ObjectIdString; title: string; description: string; image: ImageSet }[];
   createdAt: IsoDateString;
   updatedAt: IsoDateString;
   __v?: number;
@@ -275,7 +275,7 @@ export interface VerifyCheckoutResponse {
   total_tax: number;
   shipping_charge: number;
   unavailable_products: ObjectIdString[]; // product ids; UI strikes these lines and drops them from the order
-  errors?: Array<{ message: string }>; // UI shows errors[0].message when present
+  errors?: { message: string }[]; // UI shows errors[0].message when present
   [other: string]: unknown;
 }
 
@@ -357,7 +357,7 @@ export interface Order {
   payment_intent?: unknown;
   billing_address: OrderAddress;
   shipping_address: OrderAddress;
-  products: Array<{ product_id?: ObjectIdString; name?: string; order_quantity?: number; unit_price?: number; subtotal?: number; pivot?: unknown; [k: string]: unknown }>;
+  products: { product_id?: ObjectIdString; name?: string; order_quantity?: number; unit_price?: number; subtotal?: number; pivot?: unknown; [k: string]: unknown }[];
   children?: unknown[]; // sub-orders (multi-vendor template heritage)
   refund?: unknown;
   language?: string;

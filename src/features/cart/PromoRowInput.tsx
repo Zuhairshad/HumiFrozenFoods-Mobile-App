@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { AppText, Button, fireHaptic, Icon, ListSection, PressableScale } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
@@ -14,7 +14,7 @@ export function PromoRowInput() {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
   const [invalid, setInvalid] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
 
   const submit = () => {
     if (!code.trim()) return;

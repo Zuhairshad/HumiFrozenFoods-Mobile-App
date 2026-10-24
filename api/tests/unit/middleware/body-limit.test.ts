@@ -45,7 +45,7 @@ describe('requestBodyLimit', () => {
       body: chunked(['01234', '56789', 'X']),
       headers: { 'transfer-encoding': 'chunked' },
       duplex: 'half',
-    } as RequestInit);
+    });
     expect(res.status).toBe(413);
   });
 
@@ -55,7 +55,7 @@ describe('requestBodyLimit', () => {
       body: chunked(['01', '23']),
       headers: { 'transfer-encoding': 'chunked' },
       duplex: 'half',
-    } as RequestInit);
+    });
     expect(await res.json()).toEqual({ length: 4 });
   });
 

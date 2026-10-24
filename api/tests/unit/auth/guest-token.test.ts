@@ -66,8 +66,10 @@ describe('guest tokens', () => {
     it('detects signature edits and truncation', () => {
       const { service } = setup();
       const token = service.issue(ORDER).token;
-      const flipped = token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A');
-      expect(service.verify(flipped).ok).toBe(false);
+      // Flip the first MAC char: the last base64url char carries padding bits and may not change the bytes.
+      const macStart = token.lastIndexOf('.') + 1;
+      const flipped = token.slice(0, macStart) + (token[macStart] === 'A' ? 'B' : 'A') + token.slice(macStart + 1);
+      expect(service.verify(flipped)).toEqual({ ok: false, reason: 'bad_signature' });
       expect(service.verify(token.slice(0, -4))).toEqual({ ok: false, reason: 'bad_signature' });
       expect(service.verify(`${token.slice(0, token.lastIndexOf('.'))}.`)).toEqual({ ok: false, reason: 'malformed' });
     });

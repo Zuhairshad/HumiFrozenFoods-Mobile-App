@@ -11,7 +11,7 @@ describe('Secret', () => {
 
   it('is redacted in every implicit rendering', () => {
     expect(String(secret)).toBe('[REDACTED]');
-    expect(`${secret.toString()}`).not.toContain('topsecret');
+    expect(secret.toString()).not.toContain('topsecret');
     expect(JSON.stringify({ secret })).toBe('{"secret":"[REDACTED]"}');
     expect(inspect({ secret })).not.toContain('topsecret');
     expect(Object.keys(secret)).toEqual([]);

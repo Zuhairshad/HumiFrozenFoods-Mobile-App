@@ -12,7 +12,7 @@ function factsFor(product: Product): Fact[] {
   const facts: Fact[] = [{ label: 'Ready in', value: `${product.readyInMins} min` }];
   if (product.tags.includes('Halal Certified')) facts.push({ label: 'Certified', value: 'Halal' });
   if (product.tags.includes('Vegan Friendly')) facts.push({ label: 'Suitable for', value: 'Vegans' });
-  facts.push({ label: 'Cook', value: 'From frozen' });
+  facts.push({ label: 'Cook from', value: 'Frozen' });
   return facts;
 }
 

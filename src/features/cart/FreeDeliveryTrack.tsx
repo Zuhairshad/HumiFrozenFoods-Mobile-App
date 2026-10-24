@@ -1,11 +1,10 @@
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
 import { AppText, Icon } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
 import { formatPrice } from '@/lib/format';
 import { FREE_DELIVERY_THRESHOLD } from '@/lib/pricing';
-import { useReducedMotion } from 'react-native-reanimated';
 
 export interface FreeDeliveryTrackProps {
   /** Pounds still needed for free delivery (0 when unlocked). */

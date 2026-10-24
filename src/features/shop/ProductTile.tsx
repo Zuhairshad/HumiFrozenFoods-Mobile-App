@@ -65,7 +65,7 @@ function ProductTileBase({ product }: ProductTileProps) {
 }
 
 const styles = StyleSheet.create({
-  frame: { flex: 1, gap: 8 },
+  frame: { gap: 8 },
   stackedFrame: { flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: A11Y_IMAGE },
   photoWrap: { width: '100%', aspectRatio: 1 },
   photo: { width: '100%', height: '100%' },
