@@ -1,15 +1,3 @@
-import { StyleSheet, Text, View } from 'react-native';
-import { colors, fonts } from '@/theme';
+import { ShopScreen } from '@/features/shop';
 
-export default function ShopScreen() {
-  return (
-    <View style={styles.root}>
-      <Text style={styles.title}>Shop</Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.cream },
-  title: { fontFamily: fonts.display, fontSize: 32, color: colors.teal },
-});
+export default ShopScreen;

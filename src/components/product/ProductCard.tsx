@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.sand,
   },
   gridTop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     padding: spacing.sm,
     flexDirection: 'row',
     justifyContent: 'space-between',
