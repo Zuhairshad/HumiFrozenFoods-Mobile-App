@@ -1,4 +1,4 @@
-import type { Ref } from 'react';
+import type { ComponentRef, Ref } from 'react';
 import { StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import { AppText, Icon, PressableScale } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
@@ -10,7 +10,7 @@ export interface FieldProps extends Omit<TextInputProps, 'style' | 'value' | 'on
   onChangeText: (t: string) => void;
   /** Truthy flags the field invalid; render the message under the group (see `GroupError`). */
   invalid?: boolean;
-  inputRef?: Ref<TextInput>;
+  inputRef?: Ref<ComponentRef<typeof TextInput>>;
 }
 
 /** Inset-group row: 96 pt label + value; label stacks above at large Dynamic Type. */

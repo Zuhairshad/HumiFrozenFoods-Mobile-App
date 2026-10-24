@@ -43,7 +43,7 @@ function CategoryTileBase({ category }: CategoryTileProps) {
 }
 
 const styles = StyleSheet.create({
-  tile: { flex: 1, minHeight: 96, overflow: 'hidden', justifyContent: 'flex-end' },
+  tile: { minHeight: 96, overflow: 'hidden', justifyContent: 'flex-end' },
   label: { padding: 12 },
 });
 

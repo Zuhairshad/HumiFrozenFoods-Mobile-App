@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ComponentRef, type RefObject } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { AppText, FadeImage, Icon, ListSection, PressableScale } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
@@ -42,13 +42,13 @@ export function CheckoutForm({
   total,
 }: CheckoutFormProps) {
   const { c } = useTheme();
-  const phone = useRef<TextInput>(null);
-  const name = useRef<TextInput>(null);
-  const line1 = useRef<TextInput>(null);
-  const line2 = useRef<TextInput>(null);
-  const city = useRef<TextInput>(null);
-  const postcode = useRef<TextInput>(null);
-  const notes = useRef<TextInput>(null);
+  const phone = useRef<ComponentRef<typeof TextInput>>(null);
+  const name = useRef<ComponentRef<typeof TextInput>>(null);
+  const line1 = useRef<ComponentRef<typeof TextInput>>(null);
+  const line2 = useRef<ComponentRef<typeof TextInput>>(null);
+  const city = useRef<ComponentRef<typeof TextInput>>(null);
+  const postcode = useRef<ComponentRef<typeof TextInput>>(null);
+  const notes = useRef<ComponentRef<typeof TextInput>>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
 
   const days = useMemo(() => getDeliveryDays(), []);
@@ -58,7 +58,7 @@ export function CheckoutForm({
   const contactError = errors.email ?? errors.phone;
   const addressError = errors.name ?? errors.line1 ?? errors.city ?? errors.postcode;
 
-  const next = (ref: React.RefObject<TextInput | null>) => () => ref.current?.focus();
+  const next = (ref: RefObject<ComponentRef<typeof TextInput> | null>) => () => ref.current?.focus();
 
   return (
     <View pointerEvents={disabled ? 'none' : 'auto'} style={disabled ? styles.disabled : undefined}>

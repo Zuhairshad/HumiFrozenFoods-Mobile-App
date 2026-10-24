@@ -5,3 +5,4 @@ export * from './fields';
 export * from './slots';
 export * from './useStripeCheckout';
 export * from './validation';
+export * from './draft';
