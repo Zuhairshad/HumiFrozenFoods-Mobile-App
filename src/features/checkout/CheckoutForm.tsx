@@ -58,7 +58,6 @@ export function CheckoutForm({
   const contactError = errors.email ?? errors.phone;
   const addressError = errors.name ?? errors.line1 ?? errors.city ?? errors.postcode;
 
-  const next = (ref: RefObject<ComponentRef<typeof TextInput> | null>) => () => ref.current?.focus();
 
   return (
     <View pointerEvents={disabled ? 'none' : 'auto'} style={disabled ? styles.disabled : undefined}>
@@ -77,7 +76,7 @@ export function CheckoutForm({
           textContentType="emailAddress"
           returnKeyType="next"
           submitBehavior="submit"
-          onSubmitEditing={next(phone)}
+          onSubmitEditing={() => phone.current?.focus()}
         />
         <FieldRow
           inputRef={phone}
@@ -92,7 +91,7 @@ export function CheckoutForm({
           textContentType="telephoneNumber"
           returnKeyType="next"
           submitBehavior="submit"
-          onSubmitEditing={next(name)}
+          onSubmitEditing={() => name.current?.focus()}
         />
       </ListSection>
       <GroupError message={contactError} />
@@ -110,7 +109,7 @@ export function CheckoutForm({
           autoCapitalize="words"
           returnKeyType="next"
           submitBehavior="submit"
-          onSubmitEditing={next(line1)}
+          onSubmitEditing={() => line1.current?.focus()}
         />
         <FieldRow
           inputRef={line1}
@@ -124,7 +123,7 @@ export function CheckoutForm({
           autoCapitalize="words"
           returnKeyType="next"
           submitBehavior="submit"
-          onSubmitEditing={next(line2)}
+          onSubmitEditing={() => line2.current?.focus()}
         />
         <FieldRow
           inputRef={line2}
@@ -137,7 +136,7 @@ export function CheckoutForm({
           autoCapitalize="words"
           returnKeyType="next"
           submitBehavior="submit"
-          onSubmitEditing={next(city)}
+          onSubmitEditing={() => city.current?.focus()}
         />
         <FieldPair
           left={{
@@ -151,7 +150,7 @@ export function CheckoutForm({
             autoCapitalize: 'words',
             returnKeyType: 'next',
             submitBehavior: 'submit',
-            onSubmitEditing: next(postcode),
+            onSubmitEditing: () => postcode.current?.focus(),
           }}
           right={{
             inputRef: postcode,
