@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -42,20 +42,20 @@ function Particle({ angle, distance, size, color, delay }: {
   );
 }
 
+function makeParticles() {
+  return Array.from({ length: COUNT }, (_, i) => ({
+    key: i,
+    angle: (Math.PI * 2 * i) / COUNT + Math.random() * 0.4,
+    distance: 90 + Math.random() * 90,
+    size: 8 + Math.random() * 6,
+    color: PALETTE[i % PALETTE.length],
+    delay: 350 + Math.random() * 120,
+  }));
+}
+
 /** Particle burst centred on its container; purely decorative. */
 export function ConfettiBurst() {
-  const particles = useMemo(
-    () =>
-      Array.from({ length: COUNT }, (_, i) => ({
-        key: i,
-        angle: (Math.PI * 2 * i) / COUNT + Math.random() * 0.4,
-        distance: 90 + Math.random() * 90,
-        size: 8 + Math.random() * 6,
-        color: PALETTE[i % PALETTE.length],
-        delay: 350 + Math.random() * 120,
-      })),
-    [],
-  );
+  const [particles] = useState(makeParticles);
   return (
     <View style={styles.root} pointerEvents="none">
       {particles.map(({ key, ...p }) => (
@@ -66,5 +66,5 @@ export function ConfettiBurst() {
 }
 
 const styles = StyleSheet.create({
-  root: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  root: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
 });

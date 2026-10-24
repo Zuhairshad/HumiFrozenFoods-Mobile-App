@@ -11,8 +11,7 @@ import { MenuGroup, MenuRow } from '@/features/more';
 import { useFavoritesStore } from '@/store/favorites';
 import { colors, gradients, gutter, radii, shadows, spacing } from '@/theme';
 
-const SOCIALS: { key: 'instagram' | 'facebook' | 'tiktok'; icon: IoniconName; label: string }[] = [
-  { key: 'instagram', icon: 'logo-instagram', label: 'Instagram' },
+const SOCIALS: { key: 'facebook' | 'tiktok'; icon: IoniconName; label: string }[] = [
   { key: 'facebook', icon: 'logo-facebook', label: 'Facebook' },
   { key: 'tiktok', icon: 'logo-tiktok', label: 'TikTok' },
 ];

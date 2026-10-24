@@ -55,14 +55,14 @@ export function HeroActions({ product, scrollY }: ProductHeroProps) {
   const heartStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
 
   useEffect(() => {
-    pop.value = 1;
+    pop.set(1);
   }, [product.id, pop]);
 
   const onFav = () => {
     const adding = !isFav;
     toggle(product.id);
     haptics[adding ? 'success' : 'light']();
-    pop.value = withSequence(withSpring(1.4, { damping: 6, stiffness: 400 }), withSpring(1, { damping: 8, stiffness: 260 }));
+    pop.set(withSequence(withSpring(1.4, { damping: 6, stiffness: 400 }), withSpring(1, { damping: 8, stiffness: 260 })));
   };
 
   const onShare = () => {

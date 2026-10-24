@@ -52,7 +52,7 @@ const Slide = memo(function Slide({ slide, index, width, scrollX, scrollY }: Sli
   });
 
   return (
-    <View style={{ width, height: HERO_HEIGHT }}>
+    <View style={{ width, height: HERO_HEIGHT, overflow: 'hidden' }}>
       <Animated.View style={[StyleSheet.absoluteFill, imageStyle]}>
         <FadeImage uri={slide.image} style={StyleSheet.absoluteFill} />
       </Animated.View>

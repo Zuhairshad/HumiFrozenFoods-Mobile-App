@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { ComponentRef, forwardRef } from 'react';
 import { StyleSheet, TextInput, TextInputProps, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AppText } from '@/components/ui';
@@ -9,7 +9,7 @@ interface Props extends TextInputProps {
   error?: string;
 }
 
-export const FormField = forwardRef<TextInput, Props>(function FormField({ label, error, style, ...rest }, ref) {
+export const FormField = forwardRef<ComponentRef<typeof TextInput>, Props>(function FormField({ label, error, style, ...rest }, ref) {
   return (
     <View style={styles.wrap}>
       <AppText variant="label" color="inkSoft" style={styles.label}>

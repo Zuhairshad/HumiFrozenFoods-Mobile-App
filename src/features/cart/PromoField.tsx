@@ -35,13 +35,13 @@ export function PromoField({ applied, onApply, onRemove }: Props) {
     } else {
       haptics.medium();
       setError(true);
-      shake.value = withSequence(
+      shake.set(withSequence(
         withTiming(-10, { duration: 50 }),
         withTiming(10, { duration: 80 }),
         withTiming(-8, { duration: 80 }),
         withTiming(8, { duration: 80 }),
         withTiming(0, { duration: 50 }),
-      );
+      ));
     }
   };
 

@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { AppText, PressableScale, Reveal } from '@/components/ui';
@@ -9,14 +11,26 @@ import { colors, gradients, gutter, radii, shadows, spacing } from '@/theme';
 
 export function PromoBanner() {
   const router = useRouter();
+  const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+  }, []);
+
+  const onPress = () => {
+    haptics.success();
+    Clipboard.setStringAsync(siteInfo.promoCode).catch(() => {});
+    setCopied(true);
+    resetTimer.current = setTimeout(() => setCopied(false), 1600);
+    router.push('/(tabs)/shop');
+  };
+
   return (
     <Reveal style={styles.outer}>
       <PressableScale
         accessibilityLabel={`Use code ${siteInfo.promoCode} for ${siteInfo.promoPercent} percent off your first order`}
-        onPress={() => {
-          haptics.success();
-          router.push('/(tabs)/shop');
-        }}
+        onPress={onPress}
         style={styles.card}
       >
         <LinearGradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
@@ -29,9 +43,9 @@ export function PromoBanner() {
         </AppText>
         <View style={styles.row}>
           <View style={styles.code}>
-            <Ionicons name="pricetag" size={14} color={colors.gold} />
+            <Ionicons name={copied ? 'checkmark-circle' : 'pricetag'} size={14} color={colors.gold} />
             <AppText variant="label" color="white" style={styles.codeText}>
-              {siteInfo.promoCode}
+              {copied ? 'COPIED' : siteInfo.promoCode}
             </AppText>
           </View>
           <AppText variant="caption" color="tealInk" style={styles.note}>

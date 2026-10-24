@@ -35,10 +35,10 @@ export function PressableScale({
       accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
       onPressIn={() => {
-        scale.value = withSpring(scaleTo, SPRING);
+        scale.set(withSpring(scaleTo, SPRING));
       }}
       onPressOut={() => {
-        scale.value = withSpring(1, SPRING);
+        scale.set(withSpring(1, SPRING));
       }}
       onPress={() => {
         if (haptic) tapHaptic('light');

@@ -6,7 +6,6 @@ export const siteInfo = {
   address: 'Whetley Mills, Unit 2, Bradford, BD8 8LQ, United Kingdom',
   hours: 'Mon – Sat, 9:00am – 6:00pm',
   social: {
-    instagram: 'https://www.instagram.com/humis_food_uk',
     facebook: 'https://www.facebook.com/people/Humis-Frozen-Food/61587987936083/',
     tiktok: 'https://www.tiktok.com/@humis_food_uk',
   },
