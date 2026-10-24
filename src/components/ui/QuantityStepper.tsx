@@ -1,66 +1,76 @@
 import { StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeIn } from 'react-native-reanimated';
-import { colors, radii, shadows } from '@/theme';
+
+import { useTheme } from '@/hooks/useTheme';
+
 import { AppText } from './AppText';
+import { Icon } from './Icon';
+import { fireHaptic } from './haptic';
 import { PressableScale } from './PressableScale';
 
 export interface QuantityStepperProps {
   value: number;
-  onChange: (n: number) => void;
+  onChange: (next: number) => void;
   min?: number;
   max?: number;
-  size?: 'sm' | 'md';
+  size?: 'compact' | 'regular';
 }
 
-export function QuantityStepper({ value, onChange, min = 0, max = 99, size = 'md' }: QuantityStepperProps) {
-  const h = size === 'sm' ? 36 : 44;
+export function QuantityStepper({ value, onChange, min = 0, max = 20, size = 'regular' }: QuantityStepperProps) {
+  const { c } = useTheme();
+  const h = size === 'compact' ? 32 : 44;
+  const w = size === 'compact' ? 96 : 112;
   const canDec = value > min;
   const canInc = value < max;
+
+  const step = (delta: 1 | -1) => {
+    const next = Math.min(max, Math.max(min, value + delta));
+    if (next === value) return;
+    fireHaptic('selection');
+    onChange(next);
+  };
+
   return (
-    <View style={[styles.wrap, { height: h }]}>
+    <View
+      accessible
+      accessibilityRole="adjustable"
+      accessibilityLabel="Quantity"
+      accessibilityValue={{ min, max, now: value }}
+      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+      onAccessibilityAction={(e) => {
+        if (e.nativeEvent.actionName === 'increment') step(1);
+        else if (e.nativeEvent.actionName === 'decrement') step(-1);
+      }}
+      style={[styles.box, { minHeight: h, width: w, backgroundColor: c.fill }]}
+    >
       <PressableScale
-        onPress={() => canDec && onChange(value - 1)}
+        onPress={() => step(-1)}
         disabled={!canDec}
-        haptic
-        scaleTo={0.85}
+        scaleTo={0.88}
         accessibilityLabel="Decrease quantity"
-        style={[styles.btn, { width: h, height: h }, !canDec && styles.off]}
+        hitSlop={{ top: 6, bottom: 6 }}
+        style={[styles.btn, { opacity: canDec ? 1 : 0.35 }]}
       >
-        <Ionicons name={value <= 1 && min === 0 ? 'trash-outline' : 'remove'} size={size === 'sm' ? 16 : 18} color={colors.teal} />
+        <Icon name="minus" size={15} color="label" weight="semibold" />
       </PressableScale>
-      <Animated.View key={value} entering={FadeIn.duration(160)} style={[styles.value, { minWidth: size === 'sm' ? 22 : 28 }]}>
-        <AppText variant="bodyStrong" align="center" style={size === 'sm' ? styles.valueSm : undefined}>
-          {value}
-        </AppText>
-      </Animated.View>
+      <AppText variant={size === 'compact' ? 'subheadStrong' : 'headline'} maxScale={1.3} style={styles.value} accessible={false}>
+        {String(value)}
+      </AppText>
       <PressableScale
-        onPress={() => canInc && onChange(value + 1)}
+        onPress={() => step(1)}
         disabled={!canInc}
-        haptic
-        scaleTo={0.85}
+        scaleTo={0.88}
         accessibilityLabel="Increase quantity"
-        style={[styles.btn, styles.plus, { width: h, height: h }, !canInc && styles.off]}
+        hitSlop={{ top: 6, bottom: 6 }}
+        style={[styles.btn, { opacity: canInc ? 1 : 0.35 }]}
       >
-        <Ionicons name="add" size={size === 'sm' ? 16 : 18} color={colors.tealInk} />
+        <Icon name="plus" size={15} color="label" weight="semibold" />
       </PressableScale>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...shadows.sm,
-  },
-  btn: { alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill },
-  plus: { backgroundColor: colors.gold },
-  off: { opacity: 0.35 },
-  value: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
-  valueSm: { fontSize: 14 },
+  box: { flexDirection: 'row', alignItems: 'center', borderRadius: 999, borderCurve: 'continuous' },
+  btn: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
+  value: { minWidth: 24, textAlign: 'center', fontVariant: ['tabular-nums'] },
 });

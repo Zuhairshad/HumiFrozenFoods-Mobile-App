@@ -1,48 +1,68 @@
-import { StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ProductCard } from '@/components/product/ProductCard';
-import { EmptyState, Reveal, Screen, ScreenHeader } from '@/components/ui';
+import { useMemo } from 'react';
+import { FlatList, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { EmptyState } from '@/components/ui';
 import { getProduct } from '@/data';
+import { ProductTile } from '@/features/shop/ProductTile';
+import { useTheme } from '@/hooks/useTheme';
 import { useFavoritesStore } from '@/store/favorites';
 import type { Product } from '@/types';
-import { gutter, spacing } from '@/theme';
+
+const MARGIN = 20;
+const GAP = 12;
 
 export default function FavoritesScreen() {
   const router = useRouter();
+  const { c } = useTheme();
+  const { width, fontScale } = useWindowDimensions();
   const ids = useFavoritesStore((s) => s.ids);
-  const back = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/more'));
-  const items = ids.map((id) => getProduct(id)).filter((p): p is Product => !!p);
+  const items = useMemo(
+    () => ids.map((id) => getProduct(id)).filter((p): p is Product => !!p),
+    [ids],
+  );
+  const columns = fontScale >= 1.35 ? 1 : 2;
+  const cell = columns === 1 ? width - MARGIN * 2 : (width - MARGIN * 2 - GAP) / 2;
 
   return (
-    <Screen contentContainerStyle={styles.content}>
-      <ScreenHeader
-        title="Favourites"
-        subtitle={items.length ? `${items.length} saved ${items.length === 1 ? 'product' : 'products'}` : undefined}
-        onBack={back}
+    <>
+      <Stack.Screen options={{ title: 'Favourites', headerLargeTitleEnabled: true }} />
+      <FlatList
+        key={columns}
+        data={items}
+        keyExtractor={(p) => p.id}
+        numColumns={columns}
+        contentInsetAdjustmentBehavior="automatic"
+        style={{ backgroundColor: c.background }}
+        contentContainerStyle={styles.content}
+        columnWrapperStyle={columns > 1 ? styles.column : undefined}
+        ItemSeparatorComponent={columns === 1 ? Gap : undefined}
+        renderItem={({ item }) => (
+          <View style={{ width: cell }}>
+            <ProductTile product={item} variant="grid" />
+          </View>
+        )}
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <EmptyState
+              icon="heart"
+              title="No favourites yet"
+              message="Tap the heart on any product to save it here."
+              actionLabel="Explore"
+              onAction={() => router.push('/(tabs)/shop')}
+            />
+          </View>
+        }
       />
-      {items.length === 0 ? (
-        <EmptyState
-          icon="heart-outline"
-          title="No favourites yet"
-          message="Tap the heart on any product to save it here for later."
-          actionLabel="Browse products"
-          onAction={() => router.push('/(tabs)/shop')}
-        />
-      ) : (
-        <View style={styles.grid}>
-          {items.map((p, i) => (
-            <Reveal key={p.id} delay={Math.min(i, 8) * 50} style={styles.cell}>
-              <ProductCard product={p} variant="grid" index={i} />
-            </Reveal>
-          ))}
-        </View>
-      )}
-    </Screen>
+    </>
   );
 }
 
+function Gap() {
+  return <View style={{ height: 24 }} />;
+}
+
 const styles = StyleSheet.create({
-  content: { paddingBottom: spacing.huge },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, paddingHorizontal: gutter, paddingTop: spacing.sm },
-  cell: { width: '48%', flexGrow: 1 },
+  content: { paddingHorizontal: MARGIN, paddingTop: 8, paddingBottom: 48, flexGrow: 1 },
+  column: { gap: GAP, marginBottom: 24 },
+  empty: { paddingTop: 80 },
 });

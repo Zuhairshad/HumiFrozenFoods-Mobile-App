@@ -1,29 +1,30 @@
 import { StyleSheet, View } from 'react-native';
-import { ColorName } from '@/theme';
+
+import { ColorRoles } from '@/theme/colors';
 import { formatPrice } from '@/lib/format';
+
 import { AppText } from './AppText';
 
 export interface PriceProps {
   value: number;
   size?: 'sm' | 'md' | 'lg';
   compareAt?: number;
-  color?: ColorName | (string & {});
+  color?: keyof ColorRoles | (string & {});
 }
 
-const FONT = { sm: 15, md: 17, lg: 28 } as const;
-
-export function Price({ value, size = 'md', compareAt, color = 'teal' }: PriceProps) {
+export function Price({ value, size = 'md', compareAt, color = 'label' }: PriceProps) {
   return (
-    <View style={styles.row}>
+    <View style={styles.row} accessible accessibilityLabel={compareAt && compareAt > value ? `${formatPrice(value)}, was ${formatPrice(compareAt)}` : formatPrice(value)}>
       <AppText
-        variant={size === 'lg' ? 'h1' : 'price'}
+        variant={size === 'lg' ? 'priceLarge' : 'price'}
         color={color}
-        style={{ fontSize: FONT[size], lineHeight: Math.round(FONT[size] * 1.25) }}
+        style={size === 'sm' ? styles.sm : undefined}
+        accessible={false}
       >
         {formatPrice(value)}
       </AppText>
       {compareAt && compareAt > value ? (
-        <AppText variant="caption" color="muted" style={styles.strike}>
+        <AppText variant="footnote" color="labelTertiary" style={styles.strike} accessible={false}>
           {formatPrice(compareAt)}
         </AppText>
       ) : null}
@@ -33,5 +34,6 @@ export function Price({ value, size = 'md', compareAt, color = 'teal' }: PricePr
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
-  strike: { textDecorationLine: 'line-through' },
+  sm: { fontSize: 13, lineHeight: 18 },
+  strike: { textDecorationLine: 'line-through', fontVariant: ['tabular-nums'] },
 });

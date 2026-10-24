@@ -1,50 +1,83 @@
 import { ReactNode } from 'react';
-import { Pressable, StyleProp, ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { tapHaptic } from './haptic';
+import { AccessibilityRole, AccessibilityState, GestureResponderEvent, Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-const SPRING = { damping: 16, stiffness: 320, mass: 0.6 };
+import { durations, pressScale, springs } from '@/theme/motion';
+
+import { HapticKind, fireHaptic } from './haptic';
 
 export interface PressableScaleProps {
-  onPress?: () => void;
-  children: ReactNode;
-  style?: StyleProp<ViewStyle>;
-  haptic?: boolean;
+  children?: ReactNode;
+  onPress?: (e: GestureResponderEvent) => void;
+  onLongPress?: (e: GestureResponderEvent) => void;
+  onPressIn?: () => void;
+  onPressOut?: () => void;
+  /** Press-in scale (default 0.97). Reduced motion uses 0.99. */
   scaleTo?: number;
+  /** Opacity while pressed (text buttons use 0.6). */
+  pressedOpacity?: number;
+  haptic?: 'none' | Extract<HapticKind, 'selection' | 'light'>;
   disabled?: boolean;
+  style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
+  accessibilityRole?: AccessibilityRole;
+  accessibilityState?: AccessibilityState;
+  hitSlop?: PressableProps['hitSlop'];
+  testID?: string;
 }
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+/** Pressable with a UI-thread `press` spring scale. Defaults to role "button". */
 export function PressableScale({
-  onPress,
   children,
-  style,
-  haptic = false,
-  scaleTo = 0.96,
+  onPress,
+  onLongPress,
+  onPressIn,
+  onPressOut,
+  scaleTo = pressScale.tile,
+  pressedOpacity,
+  haptic = 'none',
   disabled,
-  accessibilityLabel,
+  style,
+  accessibilityRole = 'button',
+  accessibilityState,
+  ...rest
 }: PressableScaleProps) {
+  const reduced = useReducedMotion();
   const scale = useSharedValue(1);
-  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const opacity = useSharedValue(1);
+
+  const animated = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.get() }],
+    opacity: opacity.get(),
+  }));
+
+  const target = reduced ? Math.max(scaleTo, pressScale.reduced) : scaleTo;
 
   return (
     <AnimatedPressable
-      accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled: !!disabled }}
+      {...rest}
+      accessibilityRole={accessibilityRole}
+      accessibilityState={{ ...accessibilityState, disabled: !!disabled }}
       disabled={disabled}
+      onPress={(e) => {
+        if (haptic !== 'none') fireHaptic(haptic);
+        onPress?.(e);
+      }}
+      onLongPress={onLongPress}
       onPressIn={() => {
-        scale.set(withSpring(scaleTo, SPRING));
+        scale.set(reduced ? withTiming(target, { duration: durations.fast }) : withSpring(target, springs.press));
+        if (pressedOpacity !== undefined) opacity.set(withTiming(pressedOpacity, { duration: 100 }));
+        onPressIn?.();
       }}
       onPressOut={() => {
-        scale.set(withSpring(1, SPRING));
+        scale.set(reduced ? withTiming(1, { duration: durations.fast }) : withSpring(1, springs.press));
+        if (pressedOpacity !== undefined) opacity.set(withTiming(1, { duration: 150 }));
+        onPressOut?.();
       }}
-      onPress={() => {
-        if (haptic) tapHaptic('light');
-        onPress?.();
-      }}
-      style={[animated, style]}
+      style={[style, animated]}
     >
       {children}
     </AnimatedPressable>

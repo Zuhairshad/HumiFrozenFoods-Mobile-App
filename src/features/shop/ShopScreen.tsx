@@ -1,207 +1,173 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Animated, {
-  Extrapolation,
-  interpolate,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-} from 'react-native-reanimated';
-import { useLocalSearchParams } from 'expo-router';
-import { products, searchProducts, categories } from '@/data';
-import { AppText, EmptyState, Reveal, Screen } from '@/components/ui';
-import { ProductCard } from '@/components/product/ProductCard';
-import { useCart } from '@/hooks/useCart';
-import { colors, gutter, spacing, TAB_BAR_CLEARANCE } from '@/theme';
-import type { CategoryId, Product } from '@/types';
-import { CartPeekBar, CART_PEEK_HEIGHT } from './CartPeekBar';
-import { CategoryChips, CategoryFilter } from './CategoryChips';
-import { DietKey, FilterBar } from './FilterBar';
-import { SearchBar } from './SearchBar';
-import { SortSheet } from './SortSheet';
-import { sortProducts, SortKey } from './sort';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { FlatList, StyleSheet, View, useWindowDimensions, type ListRenderItem } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { Stack, useScrollToTop } from 'expo-router';
+import { AppText, EmptyState, FilterChip } from '@/components/ui';
+import { useTabInset } from '@/hooks/useTabInset';
+import { useTheme } from '@/hooks/useTheme';
+import type { Product } from '@/types';
+import { CategoryRail } from './CategoryRail';
+import { FilterButton } from './FilterButton';
+import { ProductTile } from './ProductTile';
+import { dietLabel, productCountLabel, type Diet } from './filters';
+import { useProductFilters } from './useProductFilters';
 
-const TITLE_HEIGHT = 84;
-const COLLAPSE_DISTANCE = 70;
-const GUTTER_HALF = spacing.md / 2;
-const STAGGER_CAP = 8;
+const SIDE = 20;
+const GAP = 12;
+const A11Y_FONT_SCALE = 1.35;
+const FADE_MS = 150;
 
-const AnimatedFlatList = Animated.FlatList<Product>;
-
-function parseParam(v: string | string[] | undefined): string | undefined {
-  return Array.isArray(v) ? v[0] : v;
-}
-
-function toCategory(v: string | undefined): CategoryFilter {
-  return categories.some((c) => c.id === v) ? (v as CategoryId) : 'all';
-}
+const keyExtractor = (item: Product) => item.id;
+const RowGap = () => <View style={styles.rowGap} />;
 
 export function ShopScreen() {
-  const params = useLocalSearchParams<{ category?: string; q?: string }>();
-  const categoryParam = parseParam(params.category);
-  const qParam = parseParam(params.q);
+  const { c } = useTheme();
+  const tabInset = useTabInset();
+  const { width, fontScale } = useWindowDimensions();
+  const {
+    filters,
+    results,
+    activeCount,
+    setCategory,
+    setSort,
+    setReady,
+    setQuery,
+    toggleDiet,
+    reset,
+    openSheet,
+  } = useProductFilters();
 
-  const [query, setQuery] = useState(qParam ?? '');
-  const [debounced, setDebounced] = useState(qParam ?? '');
-  const [category, setCategory] = useState<CategoryFilter>(toCategory(categoryParam));
-  const [sort, setSort] = useState<SortKey>('featured');
-  const [halal, setHalal] = useState(false);
-  const [vegan, setVegan] = useState(false);
-  const [sortOpen, setSortOpen] = useState(false);
-  const { count } = useCart();
+  const listRef = useRef<FlatList<Product>>(null);
+  useScrollToTop(listRef);
 
-  // Keep UI in sync when navigated here with new params (e.g. from Home).
-  const [prevCategoryParam, setPrevCategoryParam] = useState(categoryParam);
-  if (prevCategoryParam !== categoryParam) {
-    setPrevCategoryParam(categoryParam);
-    setCategory(toCategory(categoryParam));
-  }
-  const [prevQParam, setPrevQParam] = useState(qParam);
-  if (prevQParam !== qParam) {
-    setPrevQParam(qParam);
-    if (qParam !== undefined) {
-      setQuery(qParam);
-      setDebounced(qParam);
-    }
-  }
+  const columns = fontScale >= A11Y_FONT_SCALE ? 1 : 2;
+  const cellWidth = columns === 1 ? width - SIDE * 2 : (width - SIDE * 2 - GAP) / 2;
 
+  // Single 150 ms cross-fade when the category changes (design 5.2).
+  const fade = useSharedValue(1);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.get() }));
+  const firstRender = useRef(true);
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(query), 180);
-    return () => clearTimeout(t);
-  }, [query]);
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    fade.set(0.35);
+    fade.set(withTiming(1, { duration: FADE_MS }));
+  }, [filters.category, fade]);
 
-  const results = useMemo(() => {
-    const q = debounced.trim();
-    let list = q ? searchProducts(q) : products;
-    if (category !== 'all') list = list.filter((p) => p.category === category);
-    if (halal) list = list.filter((p) => p.tags.includes('Halal Certified'));
-    if (vegan) list = list.filter((p) => p.tags.includes('Vegan Friendly'));
-    return sortProducts(list, sort);
-  }, [debounced, category, halal, vegan, sort]);
-
-  const hasFilters = category !== 'all' || halal || vegan || sort !== 'featured' || query.length > 0;
-
-  const clearAll = () => {
-    setQuery('');
-    setDebounced('');
-    setCategory('all');
-    setHalal(false);
-    setVegan(false);
-    setSort('featured');
-  };
-
-  const onToggleDiet = useCallback((k: DietKey) => {
-    if (k === 'halal') setHalal((v) => !v);
-    else setVegan((v) => !v);
-  }, []);
-  const openSort = useCallback(() => setSortOpen(true), []);
-  const closeSort = useCallback(() => setSortOpen(false), []);
-
-  // Collapsing large title.
-  const scrollY = useSharedValue(0);
-  const onScroll = useAnimatedScrollHandler((e) => {
-    scrollY.value = e.contentOffset.y;
-  });
-  const titleStyle = useAnimatedStyle(() => ({
-    height: interpolate(scrollY.value, [0, COLLAPSE_DISTANCE], [TITLE_HEIGHT, 0], Extrapolation.CLAMP),
-    opacity: interpolate(scrollY.value, [0, COLLAPSE_DISTANCE * 0.7], [1, 0], Extrapolation.CLAMP),
-    transform: [
-      { translateY: interpolate(scrollY.value, [0, COLLAPSE_DISTANCE], [0, -12], Extrapolation.CLAMP) },
-    ],
-  }));
-
-  const renderItem = useCallback(
-    ({ item, index }: { item: Product; index: number }) => {
-      const card = <ProductCard product={item} variant="grid" index={index} />;
-      return (
-        <View style={styles.cell}>
-          {index < STAGGER_CAP ? <Reveal delay={index * 60}>{card}</Reveal> : card}
-        </View>
-      );
-    },
-    [],
+  const headerRight = useCallback(
+    () => <FilterButton active={activeCount > 0} count={activeCount} onPress={openSheet} />,
+    [activeCount, openSheet],
   );
-  const keyExtractor = useCallback((p: Product) => p.id, []);
 
-  const header = (
-    <View style={styles.listHeader}>
-      <AppText variant="caption" color="muted">
-        {results.length} {results.length === 1 ? 'product' : 'products'}
-      </AppText>
-      {hasFilters ? (
-        <AppText variant="label" color="teal" onPress={clearAll} accessibilityRole="button" style={styles.clearLink}>
-          Clear filters
-        </AppText>
-      ) : null}
-    </View>
+  const renderItem = useCallback<ListRenderItem<Product>>(
+    ({ item }) => (
+      <View style={{ width: cellWidth }}>
+        <ProductTile product={item} />
+      </View>
+    ),
+    [cellWidth],
+  );
+
+  const header = useMemo(
+    () => (
+      <View style={styles.header}>
+        <CategoryRail value={filters.category} onChange={setCategory} />
+        <View style={styles.summary}>
+          <AppText
+            variant="footnote"
+            color="labelSecondary"
+            accessibilityLiveRegion="polite"
+          >
+            {productCountLabel(results.length)}
+          </AppText>
+          {activeCount > 0 || filters.q ? (
+            <View style={styles.chips}>
+              {filters.q ? (
+                <FilterChip
+                  label={`“${filters.q}”`}
+                  selected
+                  icon="xmark"
+                  onPress={() => setQuery('')}
+                />
+              ) : null}
+              {filters.diets.map((d: Diet) => (
+                <FilterChip key={d} label={dietLabel(d)} selected icon="xmark" onPress={() => toggleDiet(d)} />
+              ))}
+              {filters.ready ? (
+                <FilterChip label={`${filters.ready} min`} selected icon="xmark" onPress={() => setReady(0)} />
+              ) : null}
+              {filters.sort !== 'featured' ? (
+                <FilterChip label="Sorted" selected icon="xmark" onPress={() => setSort('featured')} />
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+      </View>
+    ),
+    [
+      filters.category,
+      filters.q,
+      filters.diets,
+      filters.ready,
+      filters.sort,
+      results.length,
+      activeCount,
+      setCategory,
+      setSort,
+      setReady,
+      setQuery,
+      toggleDiet,
+    ],
+  );
+
+  const empty = useMemo(
+    () => (
+      <EmptyState
+        icon="line.3.horizontal.decrease.circle"
+        title="No matches"
+        message="Try removing a filter."
+        actionLabel="Clear filters"
+        onAction={reset}
+      />
+    ),
+    [reset],
   );
 
   return (
-    <Screen scroll={false} edges={['top']}>
-      <View style={styles.top}>
-        <Animated.View style={[styles.titleWrap, titleStyle]}>
-          <AppText variant="h1">Shop</AppText>
-          <AppText variant="body" color="muted">
-            {products.length} handcrafted frozen favourites
-          </AppText>
-        </Animated.View>
-        <View style={styles.search}>
-          <SearchBar value={query} onChangeText={setQuery} />
-        </View>
-        <View style={styles.chips}>
-          <CategoryChips value={category} onChange={setCategory} />
-        </View>
-        <FilterBar sort={sort} onOpenSort={openSort} halal={halal} vegan={vegan} onToggleDiet={onToggleDiet} />
-      </View>
-
-      <AnimatedFlatList
-        data={results}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        numColumns={2}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        ListHeaderComponent={header}
-        ListEmptyComponent={
-          <EmptyState
-            icon="search-outline"
-            title="Nothing found"
-            message="We couldn't find anything matching your filters. Try a different search or clear the filters."
-            actionLabel="Clear filters"
-            onAction={clearAll}
-          />
-        }
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: TAB_BAR_CLEARANCE + (count > 0 ? CART_PEEK_HEIGHT + spacing.lg : 0) },
-        ]}
-        initialNumToRender={6}
-        windowSize={7}
-        removeClippedSubviews
-      />
-
-      <CartPeekBar />
-      <SortSheet visible={sortOpen} value={sort} onSelect={setSort} onClose={closeSort} />
-    </Screen>
+    <View style={[styles.root, { backgroundColor: c.background }]}>
+      <Stack.Screen options={{ headerRight }} />
+      <Animated.View style={[styles.root, fadeStyle]}>
+        <FlatList
+          ref={listRef}
+          key={columns}
+          data={results}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          numColumns={columns}
+          columnWrapperStyle={columns > 1 ? styles.columns : undefined}
+          ListHeaderComponent={header}
+          ListEmptyComponent={empty}
+          ItemSeparatorComponent={RowGap}
+          contentInsetAdjustmentBehavior="automatic"
+          scrollIndicatorInsets={{ bottom: tabInset - 16 }}
+          contentContainerStyle={[styles.content, { paddingBottom: tabInset }]}
+          initialNumToRender={8}
+          windowSize={7}
+          showsVerticalScrollIndicator={false}
+        />
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  top: { backgroundColor: colors.cream, paddingBottom: spacing.md, gap: spacing.md, zIndex: 2 },
-  titleWrap: { paddingHorizontal: gutter, paddingTop: spacing.sm, overflow: 'hidden', justifyContent: 'flex-end' },
-  search: { paddingHorizontal: gutter },
-  chips: {},
-  listContent: { paddingHorizontal: gutter - GUTTER_HALF },
-  listHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: GUTTER_HALF,
-    paddingBottom: spacing.md,
-  },
-  clearLink: { paddingVertical: spacing.xs },
-  cell: { flex: 1, maxWidth: '50%', paddingHorizontal: GUTTER_HALF, paddingBottom: spacing.md },
+  root: { flex: 1 },
+  content: { paddingHorizontal: SIDE },
+  rowGap: { height: 24 },
+  columns: { columnGap: GAP },
+  header: { marginHorizontal: -SIDE, gap: 8, paddingTop: 8, marginBottom: 4 },
+  summary: { paddingHorizontal: SIDE, gap: 8 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });
