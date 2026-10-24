@@ -56,7 +56,7 @@ export default function TrackScreen() {
               <Reveal>
                 <Surface tone="sand" shadow={false} radius="lg">
                   <AppText variant="bodyStrong" align="center">
-                    We couldn't find "{searched}"
+                    We couldn&apos;t find &quot;{searched}&quot;
                   </AppText>
                   <AppText variant="caption" color="muted" align="center" style={styles.nf}>
                     Check the order ID in your confirmation (it looks like HUMI-48213) and try again.

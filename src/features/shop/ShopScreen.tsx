@@ -51,15 +51,19 @@ export function ShopScreen() {
   const { count } = useCart();
 
   // Keep UI in sync when navigated here with new params (e.g. from Home).
-  useEffect(() => {
+  const [prevCategoryParam, setPrevCategoryParam] = useState(categoryParam);
+  if (prevCategoryParam !== categoryParam) {
+    setPrevCategoryParam(categoryParam);
     setCategory(toCategory(categoryParam));
-  }, [categoryParam]);
-  useEffect(() => {
+  }
+  const [prevQParam, setPrevQParam] = useState(qParam);
+  if (prevQParam !== qParam) {
+    setPrevQParam(qParam);
     if (qParam !== undefined) {
       setQuery(qParam);
       setDebounced(qParam);
     }
-  }, [qParam]);
+  }
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query), 180);
@@ -77,14 +81,14 @@ export function ShopScreen() {
 
   const hasFilters = category !== 'all' || halal || vegan || sort !== 'featured' || query.length > 0;
 
-  const clearAll = useCallback(() => {
+  const clearAll = () => {
     setQuery('');
     setDebounced('');
     setCategory('all');
     setHalal(false);
     setVegan(false);
     setSort('featured');
-  }, []);
+  };
 
   const onToggleDiet = useCallback((k: DietKey) => {
     if (k === 'halal') setHalal((v) => !v);

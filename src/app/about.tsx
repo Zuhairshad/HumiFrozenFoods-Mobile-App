@@ -38,7 +38,7 @@ export default function AboutScreen() {
                 Tradition you can taste, ready when you are.
               </AppText>
               <AppText variant="body" color="tealSoft">
-                Humi's brings the warmth of a home-cooked table to your freezer.
+                Humi&apos;s brings the warmth of a home-cooked table to your freezer.
               </AppText>
             </LinearGradient>
           </View>
@@ -48,7 +48,7 @@ export default function AboutScreen() {
           <Surface radius="lg" padded={spacing.xl}>
             <AppText variant="h3">Born in a British kitchen</AppText>
             <AppText variant="body" color="inkSoft" style={styles.para}>
-              Humi's started with a simple idea: the snacks we grew up on, crisp samosas, sizzling kebabs and golden spring rolls, should never take hours to enjoy.
+              Humi&apos;s started with a simple idea: the snacks we grew up on, crisp samosas, sizzling kebabs and golden spring rolls, should never take hours to enjoy.
             </AppText>
             <AppText variant="body" color="inkSoft" style={styles.para}>
               Today we make every piece in the United Kingdom using halal-certified ingredients and traditional recipes, then flash-freeze it so it arrives at your door as fresh as the day it was folded. Straight from freezer to fryer, oven or air fryer, in minutes.

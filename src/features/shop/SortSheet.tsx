@@ -27,17 +27,20 @@ export function SortSheet({ visible, value, onSelect, onClose }: SortSheetProps)
   const [mounted, setMounted] = useState(visible);
   const progress = useSharedValue(0);
 
+  // Mount the Modal synchronously when opening; it only unmounts once the exit animation finishes.
+  if (visible && !mounted) setMounted(true);
+
   useEffect(() => {
     if (visible) {
-      setMounted(true);
-      progress.value = withSpring(1, { damping: 20, stiffness: 220, mass: 0.8 });
-    } else if (mounted) {
-      progress.value = withTiming(0, { duration: 200 }, (done) => {
-        if (done) runOnJS(setMounted)(false);
-      });
+      progress.set(withSpring(1, { damping: 20, stiffness: 220, mass: 0.8 }));
+    } else {
+      progress.set(
+        withTiming(0, { duration: 200 }, (done) => {
+          if (done) runOnJS(setMounted)(false);
+        }),
+      );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }, [visible, progress]);
 
   const backdrop = useAnimatedStyle(() => ({ opacity: progress.value }));
   const sheet = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - progress.value) * OFFSCREEN }] }));

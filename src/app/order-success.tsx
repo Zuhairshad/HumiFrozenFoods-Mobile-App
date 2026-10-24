@@ -70,7 +70,7 @@ export default function OrderSuccessScreen() {
             Order confirmed!
           </AppText>
           <AppText variant="body" color="muted" align="center" style={styles.sub}>
-            Thank you. We're getting your order ready.
+            Thank you. We&apos;re getting your order ready.
           </AppText>
         </Reveal>
 

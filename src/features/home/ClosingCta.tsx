@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { AppText, Button, Reveal } from '@/components/ui';
 import { siteInfo } from '@/data';
-import { colors, gradients, gutter, radii, shadows, spacing } from '@/theme';
+import { gradients, gutter, radii, shadows, spacing } from '@/theme';
 
 export function ClosingCta() {
   const router = useRouter();

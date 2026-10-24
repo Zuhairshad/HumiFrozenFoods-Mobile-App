@@ -46,7 +46,7 @@ export default function B2BScreen() {
             <View style={styles.heroShadow}>
               <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
                 <AppText variant="overline" color="gold">
-                  Partner with Humi's
+                  Partner with Humi&apos;s
                 </AppText>
                 <AppText variant="h1" color="white">
                   Grow your business with us
