@@ -39,7 +39,8 @@
           "resizeMode": "contain"
         }
       ],
-      "expo-image"
+      "expo-image",
+      "@stripe/stripe-react-native"
     ],
     "experiments": {
       "typedRoutes": true
