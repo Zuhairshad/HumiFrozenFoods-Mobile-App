@@ -109,12 +109,9 @@ describe('enquirySchema', () => {
   });
 
   it('enforces per-type requirements', () => {
-    const { business: _b, ...b2bNoBusiness } = validB2b;
-    expect(issuePaths(b2bNoBusiness)).toEqual(['business']);
-    const { phone: _p, ...b2bNoPhone } = validB2b;
-    expect(issuePaths(b2bNoPhone)).toEqual(['phone']);
-    const { phone: _q, ...repNoPhone } = validSalesRep;
-    expect(issuePaths(repNoPhone)).toEqual(['phone']);
+    expect(issuePaths({ ...validB2b, business: undefined })).toEqual(['business']);
+    expect(issuePaths({ ...validB2b, phone: undefined })).toEqual(['phone']);
+    expect(issuePaths({ ...validSalesRep, phone: undefined })).toEqual(['phone']);
     expect(issuePaths({ ...validContact, business: { name: 'Ab', type: 'Cd' } })).toEqual(['']);
   });
 
@@ -156,7 +153,7 @@ describe('enquirySchema', () => {
     expect(issuePaths({ ...validContact, website: { $ne: '' } })).toEqual(['website']);
   });
 
-  it.each(['123456', '+44 (0)20 7946 0958', 'abc1234567', '+++++++++++', '1234567<script>', `${'1'.repeat(21)}`, '12345\n67890'])(
+  it.each(['123456', '+44 (0)20 7946 0958', 'abc1234567', '+++++++++++', '1234567<script>', '1'.repeat(21), '12345\n67890'])(
     'rejects phone %j or accepts only well-formed ones',
     (phone) => {
       const ok = enquirySchema.safeParse({ ...validB2b, phone }).success;

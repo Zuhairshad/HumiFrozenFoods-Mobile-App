@@ -1,4 +1,4 @@
-import type { ApiErrorCode } from './types';
+import type { ApiErrorCode, ValidationDetail } from './types';
 
 /** Client-side codes for failures that never produced an API envelope. */
 export type ClientErrorCode = 'network_error' | 'timeout' | 'aborted' | 'invalid_response';
@@ -8,7 +8,6 @@ export interface AppApiErrorInit {
   status: number;
   code: AppApiErrorCode;
   message: string;
-  fields?: Record<string, string>;
   requestId?: string;
   /** Seconds, from the Retry-After header. */
   retryAfter?: number;
@@ -19,7 +18,6 @@ export interface AppApiErrorInit {
 export class AppApiError extends Error {
   readonly status: number;
   readonly code: AppApiErrorCode;
-  readonly fields?: Record<string, string>;
   readonly requestId?: string;
   readonly retryAfter?: number;
   readonly details?: unknown;
@@ -29,10 +27,14 @@ export class AppApiError extends Error {
     this.name = 'AppApiError';
     this.status = init.status;
     this.code = init.code;
-    this.fields = init.fields;
     this.requestId = init.requestId;
     this.retryAfter = init.retryAfter;
     this.details = init.details;
+  }
+
+  /** `validation_failed` details as { 'contact.email': 'Enter a valid email' } (empty when not interpretable). */
+  get fieldErrors(): Record<string, string> {
+    return toFieldErrors(this.details);
   }
 
   /** No HTTP response: offline, DNS, connection reset or timeout. */
@@ -48,6 +50,22 @@ export class AppApiError extends Error {
   get isServer(): boolean {
     return this.status >= 500;
   }
+}
+
+/** Builds a path -> message map from `details`. Ignores anything that is not a { path, message } array. */
+export function toFieldErrors(details: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!Array.isArray(details)) return out;
+  for (const d of details as Partial<ValidationDetail>[]) {
+    if (d && typeof d.path === 'string' && typeof d.message === 'string' && !(d.path in out)) out[d.path] = d.message;
+  }
+  return out;
+}
+
+/** Last path segment, so `contact.email` and `address.postcode` map onto flat form fields. */
+export function lastSegment(path: string): string {
+  const i = path.lastIndexOf('.');
+  return i < 0 ? path : path.slice(i + 1);
 }
 
 export const isAppApiError = (e: unknown): e is AppApiError => e instanceof AppApiError;

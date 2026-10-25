@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { CartLine } from '@/types';
-import { isValidPromo } from '@/lib/pricing';
+import { migrateCartState } from '@/data/id-migration';
 
 export const MIN_QTY = 1;
 export const MAX_QTY = 20;
@@ -19,6 +19,8 @@ interface CartState {
   applyPromo: (code: string) => boolean;
   removePromo: () => void;
 }
+
+type CartPersisted = { lines: CartLine[]; promoApplied: boolean };
 
 export const useCartStore = create<CartState>()(
   persist(
@@ -50,17 +52,18 @@ export const useCartStore = create<CartState>()(
         }),
       remove: (productId) => set((s) => ({ lines: s.lines.filter((l) => l.productId !== productId) })),
       clear: () => set({ lines: [], promoApplied: false }),
-      applyPromo: (code) => {
-        const ok = isValidPromo(code);
-        if (ok) set({ promoApplied: true });
-        return ok;
-      },
+      // Deprecated: the client cannot validate promos. The promo code lives in store/promo.ts and the
+      // server's quote decides. Kept (always false) so `useCart` still type-checks.
+      applyPromo: () => false,
       removePromo: () => set({ promoApplied: false }),
     }),
     {
       name: 'humi-cart',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({ lines: s.lines, promoApplied: s.promoApplied }),
+      // v1: product ids were renamed to the live API slugs (src/data/id-migration.ts). Idempotent.
+      version: 1,
+      migrate: (persisted) => migrateCartState(persisted) as CartPersisted,
     },
   ),
 );

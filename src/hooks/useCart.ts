@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
-import { getProduct } from '@/data';
 import { computeTotals } from '@/lib/pricing';
 import { useCartStore } from '@/store/cart';
+import { useProducts } from './useProducts';
 import type { CartLine, Product } from '@/types';
 
 export type CartLineWithProduct = CartLine & { product: Product };
@@ -16,14 +16,34 @@ export function useCart() {
   const applyPromo = useCartStore((s) => s.applyPromo);
   const removePromo = useCartStore((s) => s.removePromo);
 
-  const lines = useMemo<CartLineWithProduct[]>(() => {
+  const products = useProducts();
+
+  // Lines are derived from the live catalogue snapshot, so a price or stock change shows up at once.
+  // Lines whose product vanished (unpublished) are dropped from `lines` and reported in `unavailableLineIds`
+  // (the persisted cart is left alone: the product may reappear, e.g. after a failed refresh).
+  const { lines, unavailableLineIds } = useMemo(() => {
+    const byId = new Map(products.map((p) => [p.id, p]));
     const out: CartLineWithProduct[] = [];
+    const missing: string[] = [];
     for (const l of rawLines) {
-      const product = getProduct(l.productId);
+      const product = byId.get(l.productId);
       if (product) out.push({ ...l, product });
+      else missing.push(l.productId);
     }
-    return out;
-  }, [rawLines]);
+    return { lines: out, unavailableLineIds: missing };
+  }, [rawLines, products]);
+
+  /** Lines whose product exists but is currently out of stock. */
+  const outOfStockLineIds = useMemo(
+    () => lines.filter((l) => !l.product.inStock).map((l) => l.productId),
+    [lines],
+  );
+
+  /** Integer pence subtotal of the lines still available (display/estimate only; the server prices orders). */
+  const subtotalPence = useMemo(
+    () => lines.reduce((sum, l) => sum + l.product.pricePence * l.quantity, 0),
+    [lines],
+  );
 
   const count = useMemo(() => lines.reduce((n, l) => n + l.quantity, 0), [lines]);
 
@@ -39,6 +59,9 @@ export function useCart() {
 
   return {
     lines,
+    unavailableLineIds,
+    outOfStockLineIds,
+    subtotalPence,
     count,
     ...totals,
     promoApplied,

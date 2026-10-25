@@ -1,89 +1,62 @@
-import { getProduct } from '@/data';
-import { computeTotals, isValidPromo } from '@/lib/pricing';
-import { GatewayError } from './errors';
-import { API_BASE_URL, apiRequest } from './http';
-import type { CreatePaymentIntentRequest, CreatePaymentIntentResponse, OrderDraft, OrderLineDto, PricingDto } from './types';
+import { AppApiError } from './errors';
+import type { HttpClient } from './http';
+import type { OrderDraft, PaymentIntentRequest, PaymentIntentResponse } from './types';
 
-export interface PaymentIntentResult extends CreatePaymentIntentResponse {
+export interface PaymentIntentResult extends PaymentIntentResponse {
   /** True only for the offline mock. In demo mode no payment is ever taken or claimed. */
   demo: boolean;
 }
 
 export interface StripeGateway {
   readonly mode: 'http' | 'mock';
-  /** Server prices the draft, creates the order + PaymentIntent and returns the secret. */
+  /** Server re-prices the draft, creates the order + PaymentIntent and returns the secret. */
   createPaymentIntent(draft: OrderDraft, opts: { idempotencyKey: string }): Promise<PaymentIntentResult>;
 }
 
-export function makeIdempotencyKey(): string {
-  return `co_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+/** UUID v4 (contract: `Idempotency-Key` must be a UUID v4). */
+export function makeIdempotencyKey(random: () => number = Math.random): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = Math.floor(random() * 16);
+    return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
 }
 
-/** HTTP implementation: POST {EXPO_PUBLIC_API_BASE_URL}/v1/checkout/payment-intent */
-export function createHttpStripeGateway(baseUrl: string): StripeGateway {
+/** Canonical body: only contract fields, undefined/empty optionals dropped. */
+export function toPaymentIntentBody(draft: OrderDraft): PaymentIntentRequest {
+  return {
+    lines: draft.lines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
+    ...(draft.promoCode ? { promoCode: draft.promoCode } : null),
+    contact: { name: draft.contact.name, email: draft.contact.email, phone: draft.contact.phone },
+    address: {
+      line1: draft.address.line1,
+      ...(draft.address.line2 ? { line2: draft.address.line2 } : null),
+      city: draft.address.city,
+      postcode: draft.address.postcode,
+    },
+    slot: { date: draft.slot.date, window: draft.slot.window },
+    ...(draft.notes ? { notes: draft.notes } : null),
+  };
+}
+
+/** HTTP implementation: POST /v1/checkout/payment-intent. Retries (2x) reuse the SAME Idempotency-Key. */
+export function createHttpStripeGateway(client: HttpClient): StripeGateway {
   return {
     mode: 'http',
     async createPaymentIntent(draft, { idempotencyKey }) {
-      const body: CreatePaymentIntentRequest = { ...draft, idempotencyKey };
-      const res = await apiRequest<CreatePaymentIntentResponse>(baseUrl, {
+      const res = await client.request<PaymentIntentResponse>({
         method: 'POST',
         path: '/v1/checkout/payment-intent',
-        body,
-        headers: { 'Idempotency-Key': idempotencyKey },
+        body: toPaymentIntentBody(draft),
+        idempotencyKey,
+        retry: { retries: 2, baseDelayMs: 500 },
+        timeoutMs: 20000,
       });
-      if (!res.clientSecret || !res.orderId || !res.guestToken) {
-        throw new GatewayError('server', 'Unexpected response from the server.');
+      if (!res?.clientSecret || !res.orderId || !res.guestToken || !res.pricing) {
+        throw new AppApiError({ status: 200, code: 'invalid_response', message: 'Unexpected response from the server.' });
       }
       return { ...res, demo: false };
     },
   };
-}
-
-const pence = (pounds: number) => Math.round(pounds * 100);
-
-/** Offline mock: prices locally, waits a beat, returns an obviously fake secret. */
-export function createMockStripeGateway(): StripeGateway {
-  return {
-    mode: 'mock',
-    async createPaymentIntent(draft) {
-      await new Promise<void>((r) => setTimeout(r, 600));
-      const lines: OrderLineDto[] = [];
-      for (const l of draft.lines) {
-        const p = getProduct(l.productId);
-        if (!p) throw new GatewayError('validation', `Product ${l.productId} is no longer available.`, { status: 422 });
-        lines.push({ productId: p.id, name: p.name, unitPricePence: pence(p.price), quantity: l.quantity, image: p.image });
-      }
-      const promoApplied = !!draft.promoCode && isValidPromo(draft.promoCode);
-      const t = computeTotals(
-        lines.map((l) => ({ price: l.unitPricePence / 100, quantity: l.quantity })),
-        { promoApplied },
-      );
-      const pricing: PricingDto = {
-        subtotalPence: pence(t.subtotal),
-        deliveryPence: pence(t.delivery),
-        discountPence: pence(t.discount),
-        totalPence: pence(t.total),
-        currency: 'gbp',
-        promoCode: promoApplied ? 'HUMI15' : undefined,
-      };
-      const n = Math.floor(10000 + Math.random() * 90000);
-      return {
-        orderId: `demo_${n}`,
-        orderNumber: `HUMI-${n}`,
-        guestToken: 'demo-guest-token',
-        clientSecret: 'demo_client_secret_not_a_real_payment',
-        pricing,
-        lines,
-        demo: true,
-      };
-    },
-  };
-}
-
-let cached: StripeGateway | undefined;
-
-/** HTTP when EXPO_PUBLIC_API_BASE_URL is set, otherwise the mock. */
-export function getStripeGateway(): StripeGateway {
-  cached ??= API_BASE_URL ? createHttpStripeGateway(API_BASE_URL) : createMockStripeGateway();
-  return cached;
 }

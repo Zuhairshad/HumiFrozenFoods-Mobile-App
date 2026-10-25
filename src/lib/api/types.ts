@@ -100,15 +100,19 @@ export type ApiErrorCode =
   | 'payment_provider_error'
   | 'internal_error';
 
+/** Dotted path into the request body, e.g. `contact.email`, `lines.0.quantity`. */
+export interface ValidationDetail {
+  path: string;
+  message: string;
+}
+
 export interface ApiErrorBody {
   error: {
     code: string;
     message: string;
     requestId?: string;
-    /** Only on `validation_failed`. */
-    fields?: Record<string, string>;
-    /** On 422: business-rule specifics. */
-    details?: unknown;
+    /** Optional. `validation_failed`: ValidationDetail[]; 422: object with specifics. */
+    details?: ValidationDetail[] | Record<string, unknown>;
   };
 }
 

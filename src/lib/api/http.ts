@@ -149,7 +149,6 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
         status: res.status,
         code: env?.code ?? (res.status >= 500 ? 'internal_error' : 'unprocessable'),
         message: env?.message ?? genericMessage(res.status),
-        fields: env?.fields,
         requestId: env?.requestId,
         details: env?.details,
         retryAfter: parseRetryAfter(res.headers.get('retry-after')),

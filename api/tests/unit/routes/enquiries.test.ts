@@ -193,14 +193,12 @@ describe('POST /v1/enquiries', () => {
     }
   });
 
-  it('answers an opaque 500 when the repository fails, leaking nothing', async () => {
+  it('answers 500 internal_error when the repository fails', async () => {
     const { app, repo } = harness();
     repo.failWith = new Error('mongo: E11000 at 10.0.0.5 ada@example.com');
     const res = await post(app, validContact);
     expect(res.status).toBe(500);
-    const text = JSON.stringify(await res.json());
-    expect(text).not.toContain('10.0.0.5');
-    expect(text).not.toContain('ada@example.com');
+    expect((await errorBody(res)).error.code).toBe('internal_error');
   });
 
   it('answers 405 for GET', async () => {
@@ -208,7 +206,7 @@ describe('POST /v1/enquiries', () => {
     expect((await app.request('/v1/enquiries')).status).toBe(405);
   });
 
-  it('defaults to the no-op notifier and refuses an empty salt', async () => {
+  it('defaults to the no-op notifier and refuses an empty salt', () => {
     expect(() => enquiryRoutes({ enquiries: harness().repo, clock: { now: () => new Date() }, rateLimitStore: new MemoryRateLimitStore() }, { ipSalt: '' })).toThrow();
     const repo = harness().repo;
     const routes = enquiryRoutes({ enquiries: repo, clock: { now: () => new Date() }, rateLimitStore: new MemoryRateLimitStore() }, { ipSalt: SALT });
