@@ -10,6 +10,8 @@ import { MemoryRateLimitStore } from './lib/rate-limit-store.js';
 
 export interface Runtime {
   deps: AppDeps;
+  /** Stable per-deployment salt for hashing IPs, derived from the active guest-token key so it needs no extra secret. */
+  ipSalt: string;
   database: ReturnType<typeof getDatabase>;
 }
 
@@ -27,8 +29,11 @@ export function buildRuntime(config: AppConfig, onMongoClient?: (client: MongoCl
   const keyring = config.guestToken.keyring ?? new Keyring([['dev', randomBytes(32)]]);
   if (!config.guestToken.keyring) logger.warn('GUEST_TOKEN_KEYS not set; using an ephemeral key');
 
+  const ipSalt = keyring.hmac(keyring.activeKid, 'humi:enquiry-ip-salt')?.toString('hex') ?? '';
+
   return {
     database,
+    ipSalt,
     deps: {
       config,
       logger,

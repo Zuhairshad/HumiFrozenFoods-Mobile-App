@@ -15,7 +15,9 @@
     "test": "vitest run tests/unit",
     "test:coverage": "vitest run tests/unit --coverage",
     "test:integration": "vitest run tests/integration",
-    "db:indexes": "tsx --env-file-if-exists=.env src/scripts/ensure-indexes.ts"
+    "db:indexes": "tsx --env-file-if-exists=.env src/scripts/ensure-indexes.ts",
+    "verify:schema": "tsx --env-file-if-exists=.env src/scripts/verify-schema.ts",
+    "jobs:expire-pending": "tsx --env-file-if-exists=.env src/scripts/expire-pending.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",

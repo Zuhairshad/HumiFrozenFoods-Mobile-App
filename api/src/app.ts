@@ -14,6 +14,7 @@ import { requireJson } from './middleware/require-json.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { requestTimeout } from './middleware/timeout.js';
 import { healthRoutes, type Pingable } from './routes/health.js';
+import { WEBHOOK_PATH } from './routes/webhook-path.js';
 import type { AppEnv } from './types.js';
 
 /** Everything the app touches outside itself. Tests pass fakes. */
@@ -41,14 +42,14 @@ export function createApp(deps: AppDeps, mount?: MountRoutes): Hono<AppEnv> {
   // Probes come before throttling and body checks so monitoring is never rate-limited.
   app.route('/', healthRoutes(deps.database));
 
-  app.use(
-    rateLimit({
-      store: deps.rateLimitStore,
-      name: 'global',
-      limit: config.rateLimit.max,
-      windowMs: config.rateLimit.windowMs,
-    }),
-  );
+  const globalLimit = rateLimit({
+    store: deps.rateLimitStore,
+    name: 'global',
+    limit: config.rateLimit.max,
+    windowMs: config.rateLimit.windowMs,
+  });
+  // Stripe webhooks arrive from a small shared IP pool; they get their own, higher limit in routes/v1.ts.
+  app.use((c, next) => (c.req.path === WEBHOOK_PATH ? next() : globalLimit(c, next)));
   app.use(requestTimeout(config.requestTimeoutMs));
   app.use(requestBodyLimit(config.bodyLimitBytes));
   app.use(requireJson());
