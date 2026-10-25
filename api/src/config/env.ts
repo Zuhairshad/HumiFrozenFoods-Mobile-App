@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { type Keyring, parseKeyring } from '../auth/keyring.js';
+import type { BusinessConfig, PromoCode } from '../domain/types.js';
 import { Secret } from '../lib/secret.js';
 
 export class ConfigError extends Error {
@@ -28,6 +29,56 @@ const origin = z.string().refine((value) => {
     return false;
   }
 }, 'must be an exact origin such as https://example.com (scheme + host, no path or trailing slash; wildcards are not supported)');
+
+const collectionName = (fallback: string) =>
+  z.preprocess(emptyToUndefined, z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/, 'must be a plain collection name').default(fallback));
+
+const promoCodeSchema = z.object({
+  code: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/).transform((c) => c.toUpperCase()),
+  kind: z.enum(['percentage', 'fixed', 'free_shipping']),
+  value: z.number().int().min(0).max(1_000_000).default(0),
+  minSubtotalPence: z.number().int().min(0).optional(),
+  expiresAt: z.iso.datetime().optional(),
+}).refine((p) => p.kind !== 'percentage' || (p.value >= 1 && p.value <= 100), { message: 'percentage promo needs value 1-100' })
+  .refine((p) => p.kind !== 'fixed' || p.value >= 1, { message: 'fixed promo needs value >= 1 (pence)' });
+
+const promoCodes = z.preprocess(
+  (v) => (v === undefined || v === '' ? '[]' : v),
+  z.string().transform((value, ctx) => {
+    let json: unknown;
+    try {
+      json = JSON.parse(value);
+    } catch {
+      ctx.addIssue({ code: 'custom', message: 'must be a JSON array' });
+      return z.NEVER;
+    }
+    const parsed = z.array(promoCodeSchema).max(50).safeParse(json);
+    if (!parsed.success) {
+      ctx.addIssue({ code: 'custom', message: parsed.error.issues.map((i) => i.message).join('; ') });
+      return z.NEVER;
+    }
+    const seen = new Set<string>();
+    for (const p of parsed.data) {
+      if (seen.has(p.code)) {
+        ctx.addIssue({ code: 'custom', message: `duplicate promo code ${p.code}` });
+        return z.NEVER;
+      }
+      seen.add(p.code);
+    }
+    return parsed.data as PromoCode[];
+  }),
+);
+
+const siteOrderStatus = z.enum([
+  'order-pending',
+  'order-processing',
+  'order-completed',
+  'order-cancelled',
+  'order-refunded',
+  'order-failed',
+  'order-at-local-facility',
+  'order-out-for-delivery',
+]);
 
 const rawSchema = z.object({
   NODE_ENV: z.preprocess(emptyToUndefined, z.enum(['development', 'test', 'production']).default('development')),
@@ -58,6 +109,20 @@ const rawSchema = z.object({
   REQUEST_TIMEOUT_MS: intFrom(100, 60_000, 10_000),
   RATE_LIMIT_MAX: intFrom(1, 100_000, 120),
   RATE_LIMIT_WINDOW_MS: intFrom(1000, 3_600_000, 60_000),
+  ORDERS_COLLECTION: collectionName('orders'),
+  PRODUCTS_COLLECTION: collectionName('products'),
+  DELIVERY_FEE_PENCE: intFrom(0, 100_000, 799),
+  // Unset = default 5000 (GBP 50). Set but empty = delivery is never free.
+  FREE_DELIVERY_THRESHOLD_PENCE: z.preprocess(
+    (v) => (v === undefined ? 5000 : v === '' ? null : v),
+    z.coerce.number().int().min(0).max(10_000_000).nullable(),
+  ),
+  MIN_ORDER_PENCE: intFrom(0, 10_000_000, 0),
+  PROMO_CODES: promoCodes,
+  PAID_ORDER_STATUS: z.preprocess(emptyToUndefined, siteOrderStatus.default('order-pending')),
+  ORDER_NUMBER_DIGITS: intFrom(8, 16, 12),
+  PENDING_ORDER_TTL_MINUTES: intFrom(10, 10_080, 120),
+  LOW_STOCK_THRESHOLD: intFrom(0, 1000, 5),
 });
 
 const PRODUCTION_REQUIRED = [
@@ -81,6 +146,7 @@ export interface AppConfig {
   bodyLimitBytes: number;
   requestTimeoutMs: number;
   rateLimit: { max: number; windowMs: number };
+  business: BusinessConfig;
 }
 
 /**
@@ -119,5 +185,18 @@ export function loadConfig(source: Readonly<Record<string, string | undefined>> 
     bodyLimitBytes: env.BODY_LIMIT_BYTES,
     requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
     rateLimit: { max: env.RATE_LIMIT_MAX, windowMs: env.RATE_LIMIT_WINDOW_MS },
+    business: {
+      delivery: {
+        feePence: env.DELIVERY_FEE_PENCE,
+        freeThresholdPence: env.FREE_DELIVERY_THRESHOLD_PENCE,
+        minOrderPence: env.MIN_ORDER_PENCE,
+      },
+      promoCodes: env.PROMO_CODES,
+      paidOrderStatus: env.PAID_ORDER_STATUS,
+      orderNumberDigits: env.ORDER_NUMBER_DIGITS,
+      pendingOrderTtlMinutes: env.PENDING_ORDER_TTL_MINUTES,
+      lowStockThreshold: env.LOW_STOCK_THRESHOLD,
+      collections: { orders: env.ORDERS_COLLECTION, products: env.PRODUCTS_COLLECTION },
+    },
   };
 }
