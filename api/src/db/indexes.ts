@@ -1,4 +1,6 @@
 import type { IndexDescription } from 'mongodb';
+import { enquiryIndexes } from '../repositories/mongo-enquiries.js';
+import { idempotencyIndexes } from '../repositories/mongo-idempotency.js';
 
 export interface CollectionIndexes {
   collection: string;
@@ -20,4 +22,6 @@ export const defaultIndexes: readonly CollectionIndexes[] = [
       { key: { receivedAt: 1 }, name: 'receivedAt_ttl', expireAfterSeconds: NINETY_DAYS_SECONDS },
     ],
   },
+  idempotencyIndexes,
+  enquiryIndexes,
 ];

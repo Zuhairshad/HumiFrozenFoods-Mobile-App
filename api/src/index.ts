@@ -1,17 +1,18 @@
 import { serve } from '@hono/node-server';
-import { createApp } from './app.js';
 import { buildRuntime } from './bootstrap.js';
+import { createProductionApp } from './composition.js';
 import { loadConfig } from './config/env.js';
 import { closeDatabase, ensureIndexes } from './db/client.js';
 
 const config = loadConfig();
-const { deps, database } = buildRuntime(config);
+const runtime = buildRuntime(config);
+const { deps, database } = runtime;
 const { logger } = deps;
 
 // A long-lived server can afford to ensure indexes at boot; serverless deployments run `npm run db:indexes` instead.
 await ensureIndexes(database.db());
 
-const server = serve({ fetch: createApp(deps).fetch, port: config.port }, (info) => {
+const server = serve({ fetch: createProductionApp(runtime, process.env['GIT_COMMIT']).fetch, port: config.port }, (info) => {
   logger.info({ port: info.port, env: config.nodeEnv }, 'api listening');
 });
 
