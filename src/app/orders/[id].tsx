@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { RefreshControl } from 'react-native';
 import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { AppText, EmptyState, FadeImage, ListRow, ListSection, Price, ScreenScroll } from '@/components/ui';
@@ -8,6 +9,8 @@ import {
   deriveStatus,
   formatDateTime,
   isActive,
+  isLiveOrder,
+  syncOrder,
 } from '@/features/account';
 import { useTheme } from '@/hooks/useTheme';
 import { useOrdersStore } from '@/store/orders';
@@ -23,6 +26,33 @@ export default function OrderTrackScreen() {
 
   const status = order ? deriveStatus(order, now) : undefined;
   const live = status ? isActive(status) : false;
+  const [refreshing, setRefreshing] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const orderNumber = order?.id;
+  const isLive = isLiveOrder(order);
+  const cancelled = order?.remoteStatus === 'cancelled';
+
+  const refresh = useCallback(async () => {
+    if (!orderNumber) return;
+    const res = await syncOrder(orderNumber);
+    setOffline(res.kind === 'offline');
+  }, [orderNumber]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setNow(Date.now());
+    await refresh();
+    setRefreshing(false);
+  }, [refresh]);
+
+  // Fresh status from the API on open and every 30 s while the order is active (stored snapshot offline).
+  useEffect(() => {
+    if (!isLive) return;
+    void refresh();
+    if (!live || cancelled) return;
+    const t = setInterval(() => void refresh(), TICK_MS);
+    return () => clearInterval(t);
+  }, [isLive, live, cancelled, refresh]);
 
   useEffect(() => {
     if (!live) return;
@@ -54,8 +84,24 @@ export default function OrderTrackScreen() {
   return (
     <>
       <Stack.Screen options={{ title: `Order ${order.id}` }} />
-      <ScreenScroll grouped>
+      <ScreenScroll grouped refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}>
         <View style={styles.stack}>
+          {cancelled || order.paymentStatus === 'failed' || order.paymentStatus === 'refunded' || order.paymentStatus === 'pending' || offline ? (
+            <View style={styles.pad} accessibilityLiveRegion="polite">
+              <AppText variant="footnote" color={cancelled || order.paymentStatus === 'failed' ? 'destructive' : 'labelSecondary'}>
+                {cancelled
+                  ? 'This order was cancelled.'
+                  : order.paymentStatus === 'failed'
+                    ? 'Payment for this order failed.'
+                    : order.paymentStatus === 'refunded'
+                      ? 'This order was refunded.'
+                      : order.paymentStatus === 'pending'
+                        ? 'Waiting for payment confirmation.'
+                        : ''}
+                {offline ? " You're offline. Showing the saved copy." : ''}
+              </AppText>
+            </View>
+          ) : null}
           <View style={styles.pad}>
             <StatusCard order={order} status={status} />
           </View>

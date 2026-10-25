@@ -4,6 +4,7 @@ import { Stack, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { AppText, Button, FieldRow, ListSection } from '@/components/ui';
 import { FormScroll, getOrdersGateway, isEmail, isPhone } from '@/features/account';
+import { retryAfterText } from '@/lib/api/errors';
 import { haptics } from '@/hooks/useHaptics';
 
 export default function OrderLookupScreen() {
@@ -30,7 +31,11 @@ export default function OrderLookupScreen() {
       setError(
         result.reason === 'unavailable'
           ? 'Order lookup is unavailable right now. Try again shortly.'
-          : "We couldn't find an order matching those details. Check the order number and the email or phone used at checkout.",
+          : result.reason === 'offline'
+            ? "You're offline. Check your connection and try again."
+            : result.reason === 'rate-limited'
+              ? `Too many attempts. Try again in ${retryAfterText(result.retryAfter)}.`
+              : "We couldn't find that order. Check the order number and the email or phone used at checkout.",
       );
     } catch {
       setError('Order lookup is unavailable right now. Try again shortly.');

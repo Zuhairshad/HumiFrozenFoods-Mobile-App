@@ -1,8 +1,9 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { AppText, FilterChip, Icon, PressableScale } from '@/components/ui';
-import { categories, getBestSellers } from '@/data';
+import { bestSellersOf } from '@/data/selectors';
+import { useCategories, useProducts } from '@/hooks/useProducts';
 import { haptics } from '@/hooks/useHaptics';
 import { useTheme } from '@/hooks/useTheme';
 import { useSettingsStore } from '@/store/settings';
@@ -15,7 +16,6 @@ export interface SearchIdleProps {
 
 const SIDE = 20;
 const GAP = 12;
-const POPULAR = getBestSellers(6);
 const DELETE_WIDTH = 88;
 const A11Y_FONT_SCALE = 1.35;
 
@@ -83,6 +83,9 @@ const RecentRow = memo(function RecentRow({ query, onSelect, onRemove }: RecentR
 /** Idle Search content: Recent (swipe to delete), Browse (2x2 categories) and Popular. */
 function SearchIdleBase({ onSelectQuery }: SearchIdleProps) {
   const { width, fontScale } = useWindowDimensions();
+  const categories = useCategories();
+  const products = useProducts();
+  const popular = useMemo(() => bestSellersOf(products, 6), [products]);
   const recents = useSettingsStore((s) => s.recentSearches);
   const removeRecent = useSettingsStore((s) => s.removeRecentSearch);
   const clearRecents = useSettingsStore((s) => s.clearRecentSearches);
@@ -138,7 +141,7 @@ function SearchIdleBase({ onSelectQuery }: SearchIdleProps) {
           </AppText>
         </View>
         <View style={styles.chips}>
-          {POPULAR.map((p) => (
+          {popular.map((p) => (
             <FilterChip key={p.id} label={p.name} icon="flame" selected={false} onPress={() => onSelectQuery(p.name)} />
           ))}
         </View>

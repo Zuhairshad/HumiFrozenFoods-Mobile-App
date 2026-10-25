@@ -6,6 +6,7 @@ import { formatPrice } from '@/lib/format';
 import type { Product } from '@/types';
 import { AddPill } from './AddControls';
 import { ProductLink } from './ProductLink';
+import { StockTag } from './StockTag';
 import { productA11yLabel, searchFootnote } from './productMeta';
 
 export type ProductRowVariant = 'shelf' | 'search' | 'compact';
@@ -72,12 +73,13 @@ function ProductRowBase({ product, variant = 'shelf', query, hideSeparator = fal
               product.name
             )}
           </AppText>
-          {variant !== 'compact' ? (
+          {variant !== 'compact' && subtitle ? (
             <AppText variant="footnote" color="labelSecondary" numberOfLines={1}>
               {subtitle}
             </AppText>
           ) : null}
           <Price value={product.price} size="sm" />
+          <StockTag product={product} />
         </View>
         <AddPill product={product} />
       </ProductLink>

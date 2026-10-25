@@ -4,26 +4,31 @@ import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSprin
 import { AppText, Icon } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
 import { formatPrice } from '@/lib/format';
-import { FREE_DELIVERY_THRESHOLD } from '@/lib/pricing';
 
 export interface FreeDeliveryTrackProps {
-  /** Pounds still needed for free delivery (0 when unlocked). */
-  remaining: number;
+  /** `freeDeliveryRemainingPence` from the quote (0 when unlocked). */
+  remainingPence: number;
+  /** Server `delivery.freeThresholdPence`. The track is hidden when delivery is never free (null). */
+  thresholdPence: number | null;
+  /** Numbers are a local placeholder. */
+  estimate?: boolean;
 }
 
-export function FreeDeliveryTrack({ remaining }: FreeDeliveryTrackProps) {
+export function FreeDeliveryTrack({ remainingPence, thresholdPence, estimate }: FreeDeliveryTrackProps) {
   const { c, motion } = useTheme();
   const reduced = useReducedMotion();
-  const unlocked = remaining <= 0;
-  const subtotal = Math.min(FREE_DELIVERY_THRESHOLD, Math.max(0, FREE_DELIVERY_THRESHOLD - remaining));
-  const progress = useSharedValue(subtotal / FREE_DELIVERY_THRESHOLD);
+  const threshold = thresholdPence ?? 0;
+  const unlocked = remainingPence <= 0;
+  const ratio = threshold > 0 ? Math.min(1, Math.max(0, (threshold - remainingPence) / threshold)) : 0;
+  const progress = useSharedValue(ratio);
 
   useEffect(() => {
-    const target = subtotal / FREE_DELIVERY_THRESHOLD;
-    progress.set(reduced ? target : withSpring(target, motion.springs.smooth));
-  }, [subtotal, reduced, progress, motion.springs.smooth]);
+    progress.set(reduced ? ratio : withSpring(ratio, motion.springs.smooth));
+  }, [ratio, reduced, progress, motion.springs.smooth]);
 
   const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.0001, progress.get()) }] }));
+
+  if (thresholdPence === null || thresholdPence <= 0) return null;
 
   return (
     <View
@@ -31,12 +36,14 @@ export function FreeDeliveryTrack({ remaining }: FreeDeliveryTrackProps) {
       accessible
       accessibilityRole="progressbar"
       accessibilityLabel="Free delivery progress"
-      accessibilityValue={{ min: 0, max: FREE_DELIVERY_THRESHOLD, now: Math.round(subtotal * 100) / 100 }}
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(ratio * 100) }}
     >
       <View style={styles.textRow}>
         {unlocked ? <Icon name="checkmark.circle" fill size={16} color="accent" /> : null}
         <AppText variant="footnote" color={unlocked ? 'success' : 'labelSecondary'} style={styles.text}>
-          {unlocked ? "You've unlocked free delivery" : `${formatPrice(remaining)} away from free delivery`}
+          {unlocked
+            ? "You've unlocked free delivery"
+            : `${formatPrice(remainingPence / 100)} away from free delivery${estimate ? ' (estimate)' : ''}`}
         </AppText>
       </View>
       <View style={[styles.track, { backgroundColor: c.fill }]}>

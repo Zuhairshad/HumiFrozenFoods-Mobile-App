@@ -4,6 +4,7 @@ import { AppText, Button, FieldRow, FilterChip, Icon, ListSection, SegmentedCont
 import { haptics } from '@/hooks/useHaptics';
 import { useTheme } from '@/hooks/useTheme';
 import {
+  LIVE_ENQUIRY_MESSAGE,
   LOCAL_ENQUIRY_NOTICE,
   VARIANTS,
   emptyEnquiry,
@@ -96,7 +97,7 @@ export function EnquiryForm({ variant, onDone }: EnquiryFormProps) {
           {delivered ? 'Thank you' : cfg.successTitle}
         </AppText>
         <AppText variant="body" color="labelSecondary" align="center">
-          {delivered ? 'Your message has been sent to our team.' : cfg.successMessage}
+          {delivered ? LIVE_ENQUIRY_MESSAGE : cfg.successMessage}
         </AppText>
         {delivered ? null : (
           <View style={[styles.notice, { backgroundColor: c.fill }]}>

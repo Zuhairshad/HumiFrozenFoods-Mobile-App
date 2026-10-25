@@ -1,4 +1,5 @@
-import { categories, products, searchProducts } from '@/data';
+import { categories } from '@/data/categories';
+import { searchIn } from '@/data/selectors';
 import type { CategoryId, Product } from '@/types';
 import { isSortKey, sortProducts, type SortKey } from './sort';
 
@@ -84,12 +85,14 @@ export function filtersToParams(f: ProductFilters): Record<string, string | unde
   };
 }
 
-export function applyFilters(f: ProductFilters): Product[] {
+/** Pure: filters and sorts the given catalogue (from `useProducts()`), never a module-level snapshot. */
+export function applyFilters(f: ProductFilters, products: readonly Product[]): Product[] {
   const q = f.q.trim();
-  let list = q ? searchProducts(q) : products;
+  let list = q ? searchIn(products, q) : [...products];
   if (f.category !== 'all') list = list.filter((p) => p.category === f.category);
   for (const d of f.diets) list = list.filter((p) => p.tags.includes(DIET_TAG[d]));
-  if (f.ready) list = list.filter((p) => p.readyInMins <= f.ready);
+  // readyInMins 0 means unknown (live-only product): it never matches a "ready in" filter.
+  if (f.ready) list = list.filter((p) => p.readyInMins > 0 && p.readyInMins <= f.ready);
   return sortProducts(list, f.sort);
 }
 

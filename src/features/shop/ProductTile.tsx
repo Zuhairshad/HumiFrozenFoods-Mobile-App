@@ -6,6 +6,7 @@ import { formatPrice } from '@/lib/format';
 import type { Product } from '@/types';
 import { TilePlus } from './AddControls';
 import { ProductLink } from './ProductLink';
+import { StockTag } from './StockTag';
 import { productA11yLabel } from './productMeta';
 
 export interface ProductTileProps {
@@ -52,13 +53,16 @@ function ProductTileBase({ product }: ProductTileProps) {
         <AppText variant="subheadStrong" numberOfLines={2} maxScale={1.6}>
           {product.name}
         </AppText>
-        <AppText variant="footnote" color="labelSecondary" numberOfLines={1}>
-          {product.weight}
-        </AppText>
+        {product.weight ? (
+          <AppText variant="footnote" color="labelSecondary" numberOfLines={1}>
+            {product.weight}
+          </AppText>
+        ) : null}
         <View style={styles.meta}>
           <Price value={product.price} size="sm" />
-          <Rating value={product.rating} compact />
+          {product.reviewCount > 0 ? <Rating value={product.rating} compact /> : null}
         </View>
+        <StockTag product={product} />
       </View>
     </ProductLink>
   );

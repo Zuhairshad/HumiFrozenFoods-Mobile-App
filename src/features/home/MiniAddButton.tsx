@@ -30,7 +30,6 @@ export const MiniAddButton = memo(function MiniAddButton({
     <PressableScale
       onPress={onPress}
       disabled={disabled}
-      accessibilityState={{ disabled }}
       haptic="light"
       scaleTo={0.9}
       accessibilityLabel={accessibilityLabel}

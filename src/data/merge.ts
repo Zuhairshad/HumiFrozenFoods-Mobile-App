@@ -20,7 +20,7 @@ export function categoryFromCollection(collection: string): CategoryId {
  */
 export function mergeProduct(live: PublicProduct, bundled?: Product): Product {
   const liveCategory = categoryFromCollection(live.collection);
-  const image = live.image?.original ?? live.image?.thumbnail ?? bundled?.image ?? '';
+  const image = live.image?.original || live.image?.thumbnail || bundled?.image || '';
   const merged: Product = {
     id: live.id,
     name: live.name.trim() || bundled?.name || live.id,

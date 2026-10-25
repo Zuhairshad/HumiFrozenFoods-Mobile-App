@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { FlatList, StyleSheet, View, useWindowDimensions, type ListRenderItem } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, View, useWindowDimensions, type ListRenderItem } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Stack, useScrollToTop } from 'expo-router';
 import { AppText, EmptyState, FilterChip } from '@/components/ui';
+import { useCatalogSync, usePullToRefresh } from '@/hooks/useProducts';
 import { useTabInset } from '@/hooks/useTabInset';
 import { useTheme } from '@/hooks/useTheme';
 import type { Product } from '@/types';
 import { CategoryRail } from './CategoryRail';
 import { FilterButton } from './FilterButton';
+import { OfflineNote } from './OfflineNote';
 import { ProductTile } from './ProductTile';
 import { dietLabel, productCountLabel, type Diet } from './filters';
 import { useProductFilters } from './useProductFilters';
@@ -36,6 +38,9 @@ export function ShopScreen() {
     reset,
     openSheet,
   } = useProductFilters();
+
+  const { refreshing, onRefresh } = usePullToRefresh();
+  useCatalogSync();
 
   const listRef = useRef<FlatList<Product>>(null);
   useScrollToTop(listRef);
@@ -82,6 +87,7 @@ export function ShopScreen() {
           >
             {productCountLabel(results.length)}
           </AppText>
+          <OfflineNote />
           {activeCount > 0 || filters.q ? (
             <View style={styles.chips}>
               {filters.q ? (
@@ -149,6 +155,7 @@ export function ShopScreen() {
           columnWrapperStyle={columns > 1 ? styles.columns : undefined}
           ListHeaderComponent={header}
           ListEmptyComponent={empty}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.tint} />}
           ItemSeparatorComponent={RowGap}
           contentInsetAdjustmentBehavior="automatic"
           scrollIndicatorInsets={{ bottom: tabInset - 16 }}

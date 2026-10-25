@@ -17,6 +17,7 @@ interface AddControlProps {
 export const AddPill = memo(function AddPill({ product }: AddControlProps) {
   const { c } = useTheme();
   const { quantity, add, setQuantity } = useQuickAdd(product.id);
+  const { inStock } = product;
 
   return (
     <View style={styles.pillSlot}>
@@ -24,9 +25,10 @@ export const AddPill = memo(function AddPill({ product }: AddControlProps) {
         <Animated.View key="add" entering={FADE_IN} exiting={FADE_OUT}>
           <PressableScale
             onPress={add}
+            disabled={!inStock}
             scaleTo={0.94}
-            accessibilityLabel={`Add ${product.name} to cart`}
-            style={[styles.pill, { backgroundColor: c.tintSoft }]}
+            accessibilityLabel={inStock ? `Add ${product.name} to cart` : `${product.name} is out of stock`}
+            style={[styles.pill, { backgroundColor: c.tintSoft, opacity: inStock ? 1 : 0.4 }]}
             hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
           >
             <AppText variant="subheadStrong" color="tint" maxScale={1.3}>
@@ -36,7 +38,7 @@ export const AddPill = memo(function AddPill({ product }: AddControlProps) {
         </Animated.View>
       ) : (
         <Animated.View key="stepper" entering={FADE_IN} exiting={FADE_OUT}>
-          <QuantityStepper value={quantity} onChange={setQuantity} min={0} size="compact" />
+          <QuantityStepper value={quantity} onChange={setQuantity} min={0} max={inStock ? undefined : quantity} size="compact" />
         </Animated.View>
       )}
     </View>
@@ -47,6 +49,7 @@ export const AddPill = memo(function AddPill({ product }: AddControlProps) {
 export const TilePlus = memo(function TilePlus({ product }: AddControlProps) {
   const { c, isDark } = useTheme();
   const { quantity, add, setQuantity } = useQuickAdd(product.id);
+  const { inStock } = product;
   // Solid translucent fill: no live blur inside list items (design 7.5 rule 4).
   const plate = isDark ? 'rgba(20,31,31,0.82)' : 'rgba(255,255,255,0.86)';
 
@@ -56,10 +59,11 @@ export const TilePlus = memo(function TilePlus({ product }: AddControlProps) {
         <Animated.View key="plus" entering={FADE_IN} exiting={FADE_OUT}>
           <PressableScale
             onPress={add}
+            disabled={!inStock}
             scaleTo={0.9}
             haptic="none"
-            accessibilityLabel={`Add ${product.name} to cart`}
-            style={[styles.plus, { backgroundColor: plate }]}
+            accessibilityLabel={inStock ? `Add ${product.name} to cart` : `${product.name} is out of stock`}
+            style={[styles.plus, { backgroundColor: plate, opacity: inStock ? 1 : 0.4 }]}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
             <Icon name="plus" size={16} color={c.tint} weight="semibold" />
@@ -67,7 +71,7 @@ export const TilePlus = memo(function TilePlus({ product }: AddControlProps) {
         </Animated.View>
       ) : (
         <Animated.View key="stepper" entering={FADE_IN} exiting={FADE_OUT} style={[styles.plate, { backgroundColor: plate }]}>
-          <QuantityStepper value={quantity} onChange={setQuantity} min={0} size="compact" />
+          <QuantityStepper value={quantity} onChange={setQuantity} min={0} max={inStock ? undefined : quantity} size="compact" />
         </Animated.View>
       )}
     </View>

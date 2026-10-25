@@ -19,10 +19,13 @@ export function stepIndex(status: OrderStatus): number {
 }
 
 /**
- * Demo only: derive a live-feeling status from elapsed time since the order was placed.
+ * Demo orders only: derive a live-feeling status from elapsed time since the order was placed.
  * Never moves backwards from the stored status.
  */
 export function deriveStatus(order: Order, now: number = Date.now()): OrderStatus {
+  // Live orders (created through the API) show the SERVER status only; the simulation is for demo orders.
+  const live = order as { remoteId?: string; paymentStatus?: string };
+  if (live.remoteId && live.paymentStatus !== 'demo') return order.status;
   const elapsed = now - new Date(order.placedAt).getTime();
   if (Number.isNaN(elapsed)) return order.status;
   let derived: OrderStatus = 'delivered';

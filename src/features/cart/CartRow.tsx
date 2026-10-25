@@ -18,6 +18,8 @@ export interface CartRowProps {
   /** Called when the user removes the line (swipe, accessibility action). Parent shows the undo toast. */
   onRemove: (line: CartLineWithProduct) => void;
   onPressProduct?: (productId: string) => void;
+  /** Server-priced line total in pence (from the quote). Falls back to the local estimate. */
+  serverLineTotalPence?: number;
 }
 
 interface RemovePanelProps {
@@ -54,14 +56,14 @@ function RemovePanel({ translation, armedAt, onArm, onPress }: RemovePanelProps)
   );
 }
 
-function CartRowBase({ line, onChangeQuantity, onRemove, onPressProduct }: CartRowProps) {
+function CartRowBase({ line, onChangeQuantity, onRemove, onPressProduct, serverLineTotalPence }: CartRowProps) {
   const { c } = useTheme();
   const a11yLayout = useA11yLayout();
   const { width } = useWindowDimensions();
   const swipeRef = useRef<SwipeableMethods | null>(null);
   const armedRef = useRef(false);
   const { product, quantity } = line;
-  const lineTotal = product.price * quantity;
+  const lineTotal = serverLineTotalPence !== undefined ? serverLineTotalPence / 100 : product.price * quantity;
   const armedAt = (width - margin * 2) * 0.5;
 
   const setArmed = useCallback((armed: boolean) => {

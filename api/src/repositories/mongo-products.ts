@@ -114,10 +114,13 @@ export function createMongoProductsRepository(
         for (const record of mapAll(docs)) {
           if (query.collection === undefined || record.collection === query.collection) matched.push(record);
         }
-        const last = docs.at(-1);
-        if (last) {
-          after = last['_id'] as ObjectId;
-          lastScanned = after.toHexString();
+        const lastId: unknown = docs.at(-1)?.['_id'];
+        if (lastId instanceof ObjectId) {
+          after = lastId;
+          lastScanned = lastId.toHexString();
+        } else if (lastId !== undefined) {
+          // A hand-made document with a non-ObjectId _id sorts after every ObjectId and cannot be paged past.
+          exhausted = true;
         }
       }
 

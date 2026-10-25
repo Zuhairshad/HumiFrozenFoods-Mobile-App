@@ -35,7 +35,8 @@ export function isCollectionId(value: unknown): value is CollectionId {
 
 export function deriveCollection(name: string, slug: string): CollectionId {
   // Name is the editorial text; slug is only a fallback signal (it can carry typos the name does not, and vice versa).
-  const haystack = `${name} ${slug}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  // Capped so a hostile or accidental megabyte name cannot make the `.*` rule scan quadratically.
+  const haystack = `${name.slice(0, 200)} ${slug.slice(0, 100)}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   for (const rule of RULES) {
     if (rule.pattern.test(haystack)) return rule.collection;
   }

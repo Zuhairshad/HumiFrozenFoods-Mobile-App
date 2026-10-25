@@ -4,7 +4,9 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { router, Stack, usePreventRemove } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText, EmptyState, fireHaptic, PressableScale, ScreenScroll } from '@/components/ui';
-import { CheckoutBar } from '@/features/cart';
+import { CheckoutBar, SummaryRows, useCartQuote } from '@/features/cart';
+import { usePromoStore } from '@/store/promo';
+import { useConfigSync } from '@/store/server-config';
 import {
   buildOrderDraft,
   CheckoutForm,
@@ -24,7 +26,10 @@ import { useTheme } from '@/hooks/useTheme';
 export default function CheckoutScreen() {
   const insets = useSafeAreaInsets();
   const { c } = useTheme();
+  useConfigSync();
   const cart = useCart();
+  const quote = useCartQuote();
+  const clearPromo = usePromoStore((s) => s.clear);
   const checkout = useStripeCheckout();
   const scrollRef = useRef<ComponentRef<typeof ScreenScroll>>(null);
 
@@ -63,12 +68,18 @@ export default function CheckoutScreen() {
     if (next.date && next.window) setErrors((e) => ({ ...e, slot: undefined }));
   }, []);
 
-  const previewPence = Math.round(cart.total * 100);
-  const showQuote = checkout.state.error?.kind === 'price_changed' && checkout.quote;
-  const displayTotal = showQuote && checkout.quote ? checkout.quote.totalPence / 100 : cart.total;
+  const priceChange = checkout.state.error?.kind === 'price_changed' ? checkout.state.priceChange : undefined;
+  const totalPence = priceChange?.newTotalPence ?? quote.pricing.totalPence;
+  const payBlocked = quote.hasUnavailable || (!checkout.demo && !checkout.sheetAvailable);
 
   const submit = useCallback(async () => {
     if (checkout.busy) return;
+    if (quote.hasUnavailable) {
+      Alert.alert('Some items are unavailable', 'Remove them from your cart to continue.', [
+        { text: 'Back to Cart', onPress: () => router.back() },
+      ]);
+      return;
+    }
     const found = validateForm(values, !!slot.date && !!slot.window);
     setErrors(found);
     if (Object.keys(found).length > 0 || !slot.date || !slot.window) {
@@ -76,31 +87,49 @@ export default function CheckoutScreen() {
       scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
-    const draft = buildOrderDraft(values, { date: slot.date, window: slot.window }, cart.lines, cart.promoApplied);
-    const expected = showQuote && checkout.quote ? checkout.quote.totalPence : previewPence;
-    const res = await checkout.pay(draft, { expectedTotalPence: expected });
+    // Live mode: only pay against a server quote, so the payment-intent total can be compared with it.
+    if (!checkout.demo && quote.isEstimate) {
+      quote.refresh();
+      Alert.alert("We couldn't confirm your total", 'Check your connection, then tap Pay again.', [{ text: 'OK' }]);
+      return;
+    }
+    const draft = buildOrderDraft(values, { date: slot.date, window: slot.window }, cart.lines, quote.appliedPromo);
+    const res = await checkout.pay(draft, checkout.demo ? undefined : { expectedTotalPence: totalPence });
 
     if (res.status === 'succeeded' && res.result) {
       fireHaptic('success');
       cart.clear();
+      clearPromo();
       setDone(true);
       disablePrevention();
       router.replace({ pathname: '/order/[id]', params: { id: res.result.orderNumber } });
     } else if (res.status === 'failed' && res.error) {
       const err = res.error;
-      const buttons =
-        err.kind === 'unsupported' || err.kind === 'validation'
-          ? [{ text: 'OK', style: 'cancel' as const }]
-          : err.kind === 'price_changed'
-            ? [{ text: 'OK', style: 'default' as const }]
-            : [
-                { text: 'Cancel', style: 'cancel' as const },
-                { text: 'Try Again', onPress: () => retry.current() },
-              ];
+      if (err.kind === 'price_changed' || err.returnToCart) quote.refresh();
+      if (err.kind === 'validation' && err.fieldErrors && Object.keys(err.fieldErrors).length > 0) {
+        const mapped: FormErrors = {};
+        for (const [k, msg] of Object.entries(err.fieldErrors)) {
+          if (k === 'email' || k === 'phone' || k === 'name' || k === 'line1' || k === 'city' || k === 'postcode') mapped[k] = msg;
+          else if (k === 'date' || k === 'window') mapped.slot = msg;
+        }
+        setErrors((e) => ({ ...e, ...mapped }));
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+      }
+      const buttons = err.returnToCart
+        ? [
+            { text: 'Stay Here', style: 'cancel' as const },
+            { text: 'Back to Cart', onPress: () => router.back() },
+          ]
+        : err.retryable && err.kind !== 'price_changed'
+          ? [
+              { text: 'Cancel', style: 'cancel' as const },
+              { text: 'Try Again', onPress: () => retry.current() },
+            ]
+          : [{ text: 'OK', style: 'cancel' as const }];
       Alert.alert(err.title, err.message, buttons);
     }
     // 'cancelled' returns quietly to idle: no alert.
-  }, [cart, checkout, disablePrevention, previewPence, showQuote, slot, values]);
+  }, [cart, checkout, clearPromo, disablePrevention, quote, slot, totalPence, values]);
 
   useEffect(() => {
     retry.current = () => void submit();
@@ -148,7 +177,9 @@ export default function CheckoutScreen() {
 
   const footnote = checkout.demo
     ? 'Demo mode · no payment is taken'
-    : 'Secured by Stripe · Apple Pay accepted';
+    : !checkout.sheetAvailable
+      ? (checkout.sheetUnavailableMessage ?? 'Card payments need the mobile app')
+      : 'Secured by Stripe · Apple Pay accepted';
   const label = busy ? 'Processing' : 'Pay';
 
   return (
@@ -175,12 +206,26 @@ export default function CheckoutScreen() {
           onSlotChange={onSlotChange}
           lines={cart.lines}
           itemCount={cart.count}
-          total={displayTotal}
+          totalPence={totalPence}
+          pricedLines={quote.lines}
+        />
+        {quote.hasUnavailable ? (
+          <AppText variant="footnote" color="destructive" style={styles.demo} accessibilityLiveRegion="polite">
+            Some items are no longer available. Go back to your cart and remove them to continue.
+          </AppText>
+        ) : null}
+        <SummaryRows
+          totals={priceChange ? { ...quote.pricing, totalPence: priceChange.newTotalPence } : quote.pricing}
+          promoCode={quote.appliedPromo ?? undefined}
+          estimate={quote.isEstimate}
+          footer={quote.isEstimate && !checkout.demo ? 'Estimate. Your final total is confirmed before you pay.' : undefined}
         />
       </ScreenScroll>
       <CheckoutBar
         variant="glass"
-        total={displayTotal}
+        total={totalPence / 100}
+        estimate={quote.isEstimate}
+        disabled={payBlocked}
         label={label}
         loading={busy}
         onPress={() => void submit()}

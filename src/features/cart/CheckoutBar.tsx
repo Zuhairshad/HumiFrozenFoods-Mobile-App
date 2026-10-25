@@ -21,6 +21,8 @@ export interface CheckoutBarProps {
   /** `floating` only: distance from the screen bottom (TAB_INSET - 8). */
   bottom?: number;
   footnote?: string;
+  /** Total is a local placeholder, not a server quote. */
+  estimate?: boolean;
 }
 
 export function CheckoutBar({
@@ -32,10 +34,11 @@ export function CheckoutBar({
   variant = 'floating',
   bottom = 0,
   footnote,
+  estimate,
 }: CheckoutBarProps) {
   const { c, shadow } = useTheme();
   const insets = useSafeAreaInsets();
-  const title = `${label} · ${formatPrice(total)}`;
+  const title = `${label} · ${formatPrice(total)}${estimate ? ' (est.)' : ''}`;
 
   if (variant === 'glass') {
     return (

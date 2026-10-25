@@ -4,6 +4,7 @@ import { router, Stack, useScrollToTop } from 'expo-router';
 import type { SearchBarCommands } from 'react-native-screens';
 import { AppText, EmptyState, FadeImage, Icon, PressableScale } from '@/components/ui';
 import { ProductRow } from '@/features/shop/ProductRow';
+import { useCategories, useProducts } from '@/hooks/useProducts';
 import { useTabInset } from '@/hooks/useTabInset';
 import { useTheme } from '@/hooks/useTheme';
 import { useSettingsStore } from '@/store/settings';
@@ -57,6 +58,8 @@ export function SearchScreen() {
   const { c } = useTheme();
   const tabInset = useTabInset();
   const addRecent = useSettingsStore((s) => s.addRecentSearch);
+  const products = useProducts();
+  const categories = useCategories();
 
   const [query, setQuery] = useState('');
   const queryRef = useRef('');
@@ -105,7 +108,7 @@ export function SearchScreen() {
     [c.tint, commit, onChangeText],
   );
 
-  const items = useMemo(() => buildSearchItems(query), [query]);
+  const items = useMemo(() => buildSearchItems(query, products, categories), [query, products, categories]);
   const trimmed = query.trim();
 
   const renderItem = useCallback<ListRenderItem<SearchItem>>(

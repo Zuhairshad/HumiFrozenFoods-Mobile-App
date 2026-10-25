@@ -9,8 +9,4 @@ export const siteInfo = {
     facebook: 'https://www.facebook.com/people/Humis-Frozen-Food/61587987936083/',
     tiktok: 'https://www.tiktok.com/@humis_food_uk',
   },
-  freeDeliveryThreshold: 25,
-  deliveryFee: 3.99,
-  promoCode: 'HUMI15',
-  promoPercent: 15,
 } as const;

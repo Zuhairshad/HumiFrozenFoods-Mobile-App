@@ -10,7 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Button, GlassSurface, QuantityStepper } from '@/components/ui';
 import { haptics, useCart } from '@/hooks';
-import { formatPrice } from '@/lib/format';
+import { formatPence } from '@/lib/format';
 import type { Product } from '@/types';
 import { useAddedToast } from './AddedToast';
 
@@ -40,7 +40,10 @@ export function BuyBar({ product }: { product: Product }) {
 
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.get() }] }));
 
+  const inStock = product.inStock;
+
   const onAdd = () => {
+    if (!inStock) return;
     add(product.id, qty);
     haptics.light();
     notifyAdded();
@@ -51,7 +54,7 @@ export function BuyBar({ product }: { product: Product }) {
     timer.current = setTimeout(() => setAdded(false), 1400);
   };
 
-  const total = formatPrice(product.price * qty);
+  const total = formatPence(product.pricePence * qty);
 
   return (
     <View style={styles.root} pointerEvents="box-none">
@@ -63,13 +66,14 @@ export function BuyBar({ product }: { product: Product }) {
             { paddingBottom: 12 + insets.bottom, minHeight: BUY_BAR_HEIGHT + insets.bottom },
           ]}
         >
-          <QuantityStepper value={qty} onChange={setQty} min={1} max={MAX_QTY} size="regular" />
+          {inStock ? <QuantityStepper value={qty} onChange={setQty} min={1} max={MAX_QTY} size="regular" /> : null}
           <Animated.View style={[styles.cta, popStyle]}>
             <Button
-              title={added ? 'Added' : `Add to Cart · ${total}`}
-              icon={added ? 'checkmark.circle' : undefined}
+              title={!inStock ? 'Out of stock' : added ? 'Added' : `Add to Cart · ${total}`}
+              icon={inStock && added ? 'checkmark.circle' : undefined}
               size="lg"
               fullWidth
+              disabled={!inStock}
               onPress={onAdd}
             />
           </Animated.View>

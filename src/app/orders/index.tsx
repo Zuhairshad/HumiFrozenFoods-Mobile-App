@@ -1,10 +1,10 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, StyleSheet, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Stack, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { EmptyState, ListSection, RoundButton, ScreenScroll, useToast } from '@/components/ui';
-import { OrderRow, deriveStatus, isActive } from '@/features/account';
+import { OrderRow, deriveStatus, isActive, syncAllOrders } from '@/features/account';
 import { haptics } from '@/hooks/useHaptics';
 import { useCartStore } from '@/store/cart';
 import { useOrdersStore } from '@/store/orders';
@@ -27,10 +27,15 @@ export default function OrdersScreen() {
 
   const refresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => {
+    // Live orders: fetch fresh status (falls back to the stored snapshot offline). Demo: re-derive.
+    void Promise.all([syncAllOrders(), new Promise<void>((r) => setTimeout(r, 400))]).finally(() => {
       setNow(Date.now());
       setRefreshing(false);
-    }, 500);
+    });
+  }, []);
+
+  useEffect(() => {
+    void syncAllOrders();
   }, []);
 
   const open = useCallback((o: Order) => router.push(`/orders/${o.id}` as Href), [router]);
