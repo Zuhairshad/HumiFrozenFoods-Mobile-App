@@ -123,7 +123,7 @@ export function toCheckoutError(e: unknown): CheckoutError {
 
 /**
  * The pay flow as a plain state machine (no React). `pay()` is re-entrancy safe: while a run is in
- * flight, further calls return the same promise. One Idempotency-Key + PaymentIntent is kept per
+ * flight, further calls resolve at once with the current (non-final) state. One Idempotency-Key + PaymentIntent is kept per
  * checkout attempt in memory; a NEW key is minted only when cart/contact/address/slot/promo change.
  * The client never marks anything paid.
  */
@@ -220,7 +220,12 @@ export function createCheckoutMachine(deps: CheckoutDeps) {
       }
 
       set({ status: 'confirming' });
-      deps.recordOrder(draft, intent);
+      try {
+        deps.recordOrder(draft, intent);
+      } catch {
+        // The card is already charged: a local save failure must not be reported as a failed payment
+        // (a retry would only hit an already-paid PaymentIntent). The order stays findable by lookup.
+      }
       session = null;
       return set({
         status: 'succeeded',
@@ -241,7 +246,9 @@ export function createCheckoutMachine(deps: CheckoutDeps) {
       };
     },
     pay(draft: OrderDraft, opts?: PayOptions): Promise<CheckoutState> {
-      if (inFlight) return inFlight;
+      // A re-entrant call (double tap in the same frame) gets a snapshot, not the run's own promise, so the
+      // caller's success/failure handling (clear cart, navigate, alert) runs exactly once.
+      if (inFlight) return Promise.resolve(state);
       const p = run(draft, opts).finally(() => {
         inFlight = null;
       });

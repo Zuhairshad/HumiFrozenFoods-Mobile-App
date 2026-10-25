@@ -59,7 +59,11 @@ export const useOrdersStore = create<OrdersState>()(
         if (guestToken && o.remoteId) {
           const remoteId = o.remoteId;
           set((s) => ({ tokens: { ...s.tokens, [remoteId]: guestToken } }));
-          void getOrderTokenStorage().set(remoteId, guestToken);
+          // Best effort: if the keychain write fails the in-memory token still serves this session
+          // and the order can be recovered with a lookup (order number + contact).
+          getOrderTokenStorage()
+            .set(remoteId, guestToken)
+            .catch(() => undefined);
         }
         set((s) => ({ orders: [o, ...s.orders.filter((x) => x.id !== o.id)] }));
       },
@@ -76,7 +80,7 @@ export const useOrdersStore = create<OrdersState>()(
       },
       clear: () => {
         set({ orders: [], tokens: {} });
-        void getOrderTokenStorage().clear();
+        getOrderTokenStorage().clear().catch(() => undefined);
       },
     }),
     {
@@ -92,7 +96,7 @@ export const useOrdersStore = create<OrdersState>()(
         const legacy = state.orders.filter((o) => (o as { guestToken?: string }).guestToken && o.remoteId);
         for (const o of legacy) {
           const t = (o as { guestToken?: string }).guestToken as string;
-          if (t !== 'demo-guest-token') void getOrderTokenStorage().set(o.remoteId as string, t);
+          if (t !== 'demo-guest-token') getOrderTokenStorage().set(o.remoteId as string, t).catch(() => undefined);
         }
         void state.hydrateTokens();
       },
