@@ -1,4 +1,4 @@
-import { categories, products, searchProducts } from '@/data';
+import { searchIn } from '@/data/selectors';
 import type { Category, Product } from '@/types';
 
 export type SearchItem =
@@ -15,7 +15,11 @@ function rank(list: Product[], q: string): Product[] {
 }
 
 /** Flat list model for the results FlatList: category matches first, then (optionally headed) products. */
-export function buildSearchItems(query: string): SearchItem[] {
+export function buildSearchItems(
+  query: string,
+  products: readonly Product[],
+  categories: readonly Category[],
+): SearchItem[] {
   const q = query.trim();
   if (!q) return [];
   const needle = q.toLowerCase();
@@ -32,7 +36,7 @@ export function buildSearchItems(query: string): SearchItem[] {
     }
   }
 
-  const matches = rank(searchProducts(q), q);
+  const matches = rank(searchIn(products, q), q);
   if (matches.length > 8) items.push({ kind: 'header', key: 'top-matches', title: 'Top matches' });
   matches.forEach((product, i) => {
     items.push({ kind: 'product', key: product.id, product, last: i === matches.length - 1 });

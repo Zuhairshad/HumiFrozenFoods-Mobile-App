@@ -25,6 +25,8 @@ export function useStripeCheckout() {
     live.current = { sheet, c, isDark, payments: config.payments.enabled };
   });
 
+  // The machine outlives renders (it owns the idempotency session) and reads the latest values lazily.
+  /* eslint-disable react-hooks/refs */
   const machine = useMemo(
     () =>
       createCheckoutMachine({
@@ -59,6 +61,7 @@ export function useStripeCheckout() {
       }),
     [addOrder],
   );
+  /* eslint-enable react-hooks/refs */
 
   const state: CheckoutState = useSyncExternalStore(machine.subscribe, machine.getState, machine.getState);
   const pay = useCallback((draft: OrderDraft, opts?: PayOptions) => machine.pay(draft, opts), [machine]);

@@ -26,7 +26,7 @@ export const ProductLink = memo(function ProductLink({
   scaleTo = 0.97,
   accessibilityLabel,
 }: ProductLinkProps) {
-  const { id, name } = product;
+  const { id, name, inStock } = product;
   const toast = useToast();
   const isFavourite = useFavoritesStore((s) => s.ids.includes(id));
 
@@ -35,10 +35,11 @@ export const ProductLink = memo(function ProductLink({
   }, [id]);
 
   const addToCart = useCallback(() => {
+    if (!inStock) return;
     useCartStore.getState().add(id, 1);
     haptics.light();
     toast.show({ message: 'Added to cart' });
-  }, [id, toast]);
+  }, [id, inStock, toast]);
 
   const toggleFavourite = useCallback(() => {
     const was = useFavoritesStore.getState().ids.includes(id);
@@ -77,9 +78,11 @@ export const ProductLink = memo(function ProductLink({
         </PressableScale>
       </Link.Trigger>
       <Link.Menu>
-        <Link.MenuAction icon="cart.badge.plus" onPress={addToCart}>
-          Add to cart
-        </Link.MenuAction>
+        {inStock ? (
+          <Link.MenuAction icon="cart.badge.plus" onPress={addToCart}>
+            Add to cart
+          </Link.MenuAction>
+        ) : null}
         <Link.MenuAction icon={isFavourite ? 'heart.slash' : 'heart'} onPress={toggleFavourite}>
           {isFavourite ? 'Remove from favourites' : 'Add to favourites'}
         </Link.MenuAction>

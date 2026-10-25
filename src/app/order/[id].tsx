@@ -1,49 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText, Button, EmptyState, FadeImage, fireHaptic, ListSection, PressableScale, ScreenScroll } from '@/components/ui';
+import { patchFromApi } from '@/features/account/order-mapping';
+import { syncOrder } from '@/features/account/order-sync';
 import { ConfirmationCheck } from '@/features/checkout';
+import { pollOrderPayment } from '@/features/checkout/order-polling';
 import { useTheme } from '@/hooks/useTheme';
-import { isGatewayError } from '@/lib/api/errors';
-import { isDemoMode } from '@/lib/api/http';
+import { getHttpClient, isDemoMode } from '@/lib/api/http';
 import { fetchOrder } from '@/lib/api/orders-client';
-import type { OrderDto } from '@/lib/api/types';
 import { formatPrice } from '@/lib/format';
-import { useOrdersStore, type StoredOrder } from '@/store/orders';
-import type { OrderStatus } from '@/types';
+import { useOrdersStore } from '@/store/orders';
 
-const POLL_MS = 3000;
-const MAX_POLLS = 10;
-
-const penceToPounds = (p: number) => Math.round(p) / 100;
-
-function toLocalStatus(s: OrderDto['status'], fallback: OrderStatus): OrderStatus {
-  switch (s) {
-    case 'pending_payment':
-    case 'placed':
-      return 'placed';
-    case 'preparing':
-    case 'out-for-delivery':
-    case 'delivered':
-      return s;
-    default:
-      return fallback;
-  }
-}
-
-/** Merge the server's view (source of truth) over the locally stored order. */
-function mergeRemote(local: StoredOrder, r: OrderDto): Partial<StoredOrder> {
-  return {
-    status: toLocalStatus(r.status, local.status),
-    paymentStatus: r.paymentStatus,
-    subtotal: penceToPounds(r.pricing.subtotalPence),
-    delivery: penceToPounds(r.pricing.deliveryPence),
-    discount: penceToPounds(r.pricing.discountPence),
-    total: penceToPounds(r.pricing.totalPence),
-    contact: r.contact,
-  };
-}
+type Phase = 'polling' | 'delayed';
 
 export default function OrderConfirmationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -51,40 +21,53 @@ export default function OrderConfirmationScreen() {
   const insets = useSafeAreaInsets();
   const order = useOrdersStore((s) => (id ? s.orders.find((o) => o.id.toUpperCase() === id.toUpperCase()) : undefined));
   const patchOrder = useOrdersStore((s) => s.patchOrder);
-  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const token = useOrdersStore((s) => s.getToken(order?.remoteId));
+  const [phase, setPhase] = useState<Phase>('polling');
+  const [offline, setOffline] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const orderId = order?.id;
   const remoteId = order?.remoteId;
-  const token = order?.guestToken;
-  const pending = order?.paymentStatus === 'pending';
+  const live = !isDemoMode && !!orderId && !!remoteId && !!token && order?.paymentStatus !== 'demo';
+  const paymentStatus = order?.paymentStatus;
 
-  // Fetch with the guest token; keep polling while the webhook has not yet marked it paid.
-  useEffect(() => {
-    if (isDemoMode || !orderId || !remoteId || !token) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let polls = 0;
-    const tick = async () => {
-      try {
-        const remote = await fetchOrder(remoteId, token);
-        if (cancelled || !remote) return;
+  // Poll GET /v1/orders/:id (3 s x 10) with the guest token. The server, via the Stripe webhook, is the
+  // only thing that can say "paid"; PaymentSheet success alone never does.
+  const runPoll = useCallback(() => {
+    if (!live || !orderId || !remoteId || !token) return;
+    abortRef.current?.abort();
+    const ctl = new AbortController();
+    abortRef.current = ctl;
+    void pollOrderPayment({
+      signal: ctl.signal,
+      fetchOrder: (signal) => fetchOrder(getHttpClient(), remoteId, token, signal),
+      onUpdate: (remote) => {
+        setOffline(false);
         const local = useOrdersStore.getState().getOrder(orderId);
-        if (local) patchOrder(orderId, mergeRemote(local, remote));
-        setRefreshError(null);
-        if (remote.paymentStatus !== 'pending') return;
-      } catch (e) {
-        if (cancelled) return;
-        setRefreshError(isGatewayError(e) && e.kind === 'network' ? "You're offline. Showing the saved copy of your order." : null);
-      }
-      polls += 1;
-      if (polls < MAX_POLLS) timer = setTimeout(() => void tick(), POLL_MS);
-    };
-    void tick();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [orderId, remoteId, token, patchOrder]);
+        if (local) patchOrder(orderId, patchFromApi(remote, local));
+      },
+      onError: () => setOffline(true),
+    }).then((outcome) => {
+      if (outcome.kind === 'cancelled') return;
+      setPhase(outcome.kind === 'timeout' ? 'delayed' : 'polling');
+    });
+  }, [live, orderId, remoteId, token, patchOrder]);
+
+  useEffect(() => {
+    if (live && paymentStatus === 'pending') runPoll();
+    return () => abortRef.current?.abort();
+    // Only (re)start when the order identity changes, not on every status patch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId, live]);
+
+  const manualRefresh = useCallback(async () => {
+    if (!orderId) return;
+    setRefreshing(true);
+    const res = await syncOrder(orderId);
+    setOffline(res.kind === 'offline');
+    setRefreshing(false);
+  }, [orderId]);
 
   const onDone = useCallback(() => router.replace('/'), []);
   const onStart = useCallback(() => fireHaptic('success'), []);
@@ -126,13 +109,17 @@ export default function OrderConfirmationScreen() {
   const first = order.contact?.name.trim().split(/\s+/)[0];
   const failed = order.paymentStatus === 'failed';
   const demo = order.paymentStatus === 'demo';
+  const refunded = order.paymentStatus === 'refunded';
+  const pending = order.paymentStatus === 'pending';
   const subtitle = failed
-    ? `We couldn't confirm payment for order ${order.id}.`
-    : pending
-      ? `Order ${order.id} is placed. Confirming your payment…`
-      : demo
-        ? `Demo order ${order.id}. No payment was taken.`
-        : `Order ${order.id} is confirmed`;
+    ? `We couldn't confirm payment for order ${order.id}. If you were charged, contact us with this number.`
+    : refunded
+      ? `Order ${order.id} was refunded.`
+      : pending
+        ? `Payment received — confirming… Order ${order.id} will be confirmed as soon as the bank responds.`
+        : demo
+          ? `Demo order ${order.id}. No payment was taken.`
+          : `Order ${order.id} is confirmed`;
 
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
@@ -176,13 +163,18 @@ export default function OrderConfirmationScreen() {
 
         {order.contact?.email ? (
           <AppText variant="footnote" color="labelSecondary" align="center" style={styles.note}>
-            {demo ? 'Demo mode: no receipt is sent.' : `A receipt was sent to ${order.contact.email}.`}
+            {demo ? 'Demo mode: no receipt is sent.' : order.paymentStatus === 'paid' ? `A receipt will be emailed to ${order.contact.email}.` : `We'll email a receipt to ${order.contact.email} once payment is confirmed.`}
           </AppText>
         ) : null}
-        {refreshError ? (
+        {offline ? (
           <AppText variant="footnote" color="labelTertiary" align="center" style={styles.note}>
-            {refreshError}
+            You&apos;re offline. Showing the saved copy of your order.
           </AppText>
+        ) : null}
+        {pending && phase === 'delayed' ? (
+          <View style={styles.actions}>
+            <Button title="Refresh status" variant="tinted" size="lg" fullWidth loading={refreshing} onPress={() => void manualRefresh()} />
+          </View>
         ) : null}
 
         <View style={styles.actions}>

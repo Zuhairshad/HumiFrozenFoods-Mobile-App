@@ -5,9 +5,10 @@ import { formatPrice } from '@/lib/format';
 import type { CartLineWithProduct } from '@/hooks/useCart';
 import { DaySegment } from './DaySegment';
 import { FieldPair, FieldRow, GroupError, RadioRow } from './fields';
-import { DELIVERY_WINDOWS, getDeliveryDays, isWindowAvailable } from './slots';
+import { getDeliveryDays, getDeliveryWindows, isWindowAvailable } from './slots';
+import { useServerConfig } from '@/store/server-config';
 import type { CheckoutFormValues, FormErrors, RequiredField } from './validation';
-import type { DeliveryWindowId } from '@/lib/api/types';
+import type { DeliveryWindowId, PricedLine } from '@/lib/api/types';
 
 export interface SlotSelection {
   date: string | null;
@@ -24,8 +25,10 @@ export interface CheckoutFormProps {
   onSlotChange: (slot: SlotSelection) => void;
   lines: CartLineWithProduct[];
   itemCount: number;
-  /** Total shown in the collapsed summary row (pounds). */
-  total: number;
+  /** Server-quoted total in pence shown in the collapsed summary row. */
+  totalPence: number;
+  /** Server-priced lines (name/line total) when a quote exists. */
+  pricedLines?: PricedLine[];
 }
 
 export function CheckoutForm({
@@ -38,7 +41,8 @@ export function CheckoutForm({
   onSlotChange,
   lines,
   itemCount,
-  total,
+  totalPence,
+  pricedLines,
 }: CheckoutFormProps) {
   const phone = useRef<ComponentRef<typeof TextInput>>(null);
   const name = useRef<ComponentRef<typeof TextInput>>(null);
@@ -49,6 +53,8 @@ export function CheckoutForm({
   const notes = useRef<ComponentRef<typeof TextInput>>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
 
+  const { config } = useServerConfig();
+  const windows = useMemo(() => getDeliveryWindows(config.slotWindows), [config.slotWindows]);
   const days = useMemo(() => getDeliveryDays(), []);
   const selectedDay = days.find((d) => d.key === slot.date) ?? null;
   const now = new Date();
@@ -172,11 +178,11 @@ export function CheckoutForm({
       </AppText>
       <DaySegment days={days} value={slot.date} onChange={(date) => {
         const day = days.find((d) => d.key === date);
-        const keep = day && slot.window && isWindowAvailable(day, DELIVERY_WINDOWS.find((w) => w.id === slot.window)!, now);
+        const keep = day && slot.window && isWindowAvailable(day, windows.find((w) => w.id === slot.window)!, now);
         onSlotChange({ date, window: keep ? slot.window : null });
       }} />
       <ListSection>
-        {DELIVERY_WINDOWS.map((w) => (
+        {windows.map((w) => (
           <RadioRow
             key={w.id}
             title={w.label}
@@ -193,7 +199,7 @@ export function CheckoutForm({
         <PressableScale
           onPress={() => setSummaryOpen((o) => !o)}
           scaleTo={1}
-          accessibilityLabel={`Order summary, ${itemCount} ${itemCount === 1 ? 'item' : 'items'}, ${formatPrice(total)}`}
+          accessibilityLabel={`Order summary, ${itemCount} ${itemCount === 1 ? 'item' : 'items'}, ${formatPrice(totalPence / 100)}`}
           accessibilityState={{ expanded: summaryOpen }}
           style={styles.summaryRow}
         >
@@ -201,7 +207,7 @@ export function CheckoutForm({
             Order summary
           </AppText>
           <AppText variant="callout" color="labelSecondary">
-            {itemCount} {itemCount === 1 ? 'item' : 'items'} · {formatPrice(total)}
+            {itemCount} {itemCount === 1 ? 'item' : 'items'} · {formatPrice(totalPence / 100)}
           </AppText>
           <Icon name={summaryOpen ? 'chevron.up' : 'chevron.down'} size={13} color="labelQuaternary" />
         </PressableScale>
@@ -212,7 +218,7 @@ export function CheckoutForm({
                 <AppText variant="subhead" numberOfLines={2} style={styles.grow}>
                   {l.quantity} × {l.product.name}
                 </AppText>
-                <AppText variant="price">{formatPrice(l.product.price * l.quantity)}</AppText>
+                <AppText variant="price">{formatPrice((pricedLines?.find((p) => p.productId === l.productId)?.lineTotalPence ?? Math.round(l.product.price * 100) * l.quantity) / 100)}</AppText>
               </View>
             ))
           : null}

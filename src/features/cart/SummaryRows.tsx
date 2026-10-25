@@ -2,18 +2,19 @@ import { StyleSheet, View } from 'react-native';
 import { AppText, ListSection } from '@/components/ui';
 import { formatPrice } from '@/lib/format';
 
+/** Pence figures from the server quote (or the labelled estimate). */
 export interface SummaryTotals {
-  subtotal: number;
-  delivery: number;
-  discount: number;
-  total: number;
+  subtotalPence: number;
+  deliveryPence: number;
+  discountPence: number;
+  totalPence: number;
 }
 
 export interface SummaryRowsProps {
   totals: SummaryTotals;
-  /** Shown in the discount row label, e.g. "HUMI15". */
+  /** Shown in the discount row label (the code the server accepted). */
   promoCode?: string;
-  /** Marks the figures as an estimate (client-side preview before the server prices the order). */
+  /** Figures are a local placeholder (loading first quote, offline, demo). Server numbers are never labelled. */
   estimate?: boolean;
   footer?: string;
 }
@@ -42,19 +43,20 @@ function Line({
 }
 
 export function SummaryRows({ totals, promoCode, estimate, footer }: SummaryRowsProps) {
-  const free = totals.delivery === 0 && totals.subtotal > 0;
+  const free = totals.deliveryPence === 0 && totals.subtotalPence > 0;
+  const p = (n: number) => formatPrice(n / 100);
   return (
     <ListSection footer={footer}>
-      <Line label="Subtotal" value={formatPrice(totals.subtotal)} />
-      <Line label="Delivery" value={free ? 'Free' : formatPrice(totals.delivery)} color={free ? 'success' : undefined} />
-      {totals.discount > 0 ? (
+      <Line label="Subtotal" value={p(totals.subtotalPence)} />
+      <Line label="Delivery" value={free ? 'Free' : p(totals.deliveryPence)} color={free ? 'success' : undefined} />
+      {totals.discountPence > 0 ? (
         <Line
           label={promoCode ? `Discount (${promoCode})` : 'Discount'}
-          value={`-${formatPrice(totals.discount)}`}
+          value={`-${p(totals.discountPence)}`}
           color="success"
         />
       ) : null}
-      <Line label={estimate ? 'Estimated total' : 'Total'} value={formatPrice(totals.total)} strong />
+      <Line label={estimate ? 'Estimate' : 'Total'} value={p(totals.totalPence)} strong />
     </ListSection>
   );
 }

@@ -115,6 +115,7 @@ export function mapProductDocument(doc: unknown, business: Pick<BusinessConfig, 
   // Same rule as the live site: sale_price wins when truthy (0/null/absent mean "no sale").
   const sale = asNumber(doc['sale_price']);
   const salePence = sale !== null && sale > 0 ? poundsToPence(sale) : null;
+  if (sale !== null && sale > 0 && salePence === null) return { ok: false, reason: 'invalid sale_price' };
   const pricePence = salePence ?? basePence;
   const showDiscount = asBoolean(doc['discount']) === true;
   const compareAtPricePence = showDiscount && salePence !== null && salePence < basePence ? basePence : null;

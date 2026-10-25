@@ -1,6 +1,5 @@
 import type { CartLineWithProduct } from '@/hooks/useCart';
 import type { OrderDraft } from '@/lib/api/types';
-import { PROMO_CODE } from '@/lib/pricing';
 import type { SlotSelection } from './CheckoutForm';
 import { normalisePostcode, type CheckoutFormValues } from './validation';
 
@@ -9,13 +8,13 @@ export function buildOrderDraft(
   values: CheckoutFormValues,
   slot: Required<{ [K in keyof SlotSelection]: NonNullable<SlotSelection[K]> }>,
   lines: CartLineWithProduct[],
-  promoApplied: boolean,
+  promoCode: string | null,
 ): OrderDraft {
   const line2 = values.line2.trim();
   const notes = values.notes.trim();
   return {
     lines: lines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
-    promoCode: promoApplied ? PROMO_CODE : undefined,
+    promoCode: promoCode || undefined,
     contact: { name: values.name.trim(), email: values.email.trim(), phone: values.phone.trim() },
     address: {
       line1: values.line1.trim(),

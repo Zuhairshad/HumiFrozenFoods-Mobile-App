@@ -11,3 +11,5 @@ export * from './order-utils';
 export * from './orders-gateway';
 export * from './enquiry';
 export { FormScroll } from './FormScroll';
+export * from './order-sync';
+export * from './order-mapping';

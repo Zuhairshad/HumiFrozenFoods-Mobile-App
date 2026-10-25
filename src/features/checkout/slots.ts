@@ -1,4 +1,4 @@
-import type { DeliveryWindowId } from '@/lib/api/types';
+import type { DeliveryWindowId, SlotWindowConfig } from '../../lib/api/types';
 
 export interface DeliveryWindow {
   id: DeliveryWindowId;
@@ -7,11 +7,22 @@ export interface DeliveryWindow {
   startHour: number;
 }
 
+/** FALLBACK labels, used until GET /v1/config returns `slotWindows`. */
 export const DELIVERY_WINDOWS: readonly DeliveryWindow[] = [
   { id: 'morning', label: 'Morning', range: '8am-12pm', startHour: 8 },
   { id: 'afternoon', label: 'Afternoon', range: '12pm-5pm', startHour: 12 },
   { id: 'evening', label: 'Evening', range: '5pm-9pm', startHour: 17 },
 ];
+
+const START_HOURS: Record<DeliveryWindowId, number> = { morning: 8, afternoon: 12, evening: 17 };
+
+/** Windows from the server config (labels/ranges), else the fallback list. */
+export function getDeliveryWindows(server?: SlotWindowConfig[]): readonly DeliveryWindow[] {
+  if (!server || server.length === 0) return DELIVERY_WINDOWS;
+  return server
+    .filter((w) => w.id in START_HOURS)
+    .map((w) => ({ id: w.id, label: w.label, range: w.range, startHour: START_HOURS[w.id] }));
+}
 
 /** Same-day delivery is offered only before 15:00 (site rule). */
 export const SAME_DAY_CUTOFF_HOUR = 15;
@@ -49,9 +60,9 @@ export function isWindowAvailable(day: DeliveryDay, w: DeliveryWindow, now: Date
 }
 
 /** "Sat 25 Oct, 8am-12pm" */
-export function formatSlotLabel(dateKey: string, window: DeliveryWindowId): string {
+export function formatSlotLabel(dateKey: string, window: DeliveryWindowId, windows: readonly DeliveryWindow[] = DELIVERY_WINDOWS): string {
   const [y, m, d] = dateKey.split('-').map(Number);
   const date = new Date(y, m - 1, d);
-  const w = DELIVERY_WINDOWS.find((x) => x.id === window);
+  const w = windows.find((x) => x.id === window);
   return `${WEEKDAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}, ${w?.range ?? ''}`;
 }

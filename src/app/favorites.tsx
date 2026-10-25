@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { FlatList, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { EmptyState } from '@/components/ui';
-import { getProduct } from '@/data';
+import { useProducts } from '@/hooks/useProducts';
 import { ProductTile } from '@/features/shop/ProductTile';
 import { useTheme } from '@/hooks/useTheme';
 import { useFavoritesStore } from '@/store/favorites';
@@ -16,10 +16,11 @@ export default function FavoritesScreen() {
   const { c } = useTheme();
   const { width, fontScale } = useWindowDimensions();
   const ids = useFavoritesStore((s) => s.ids);
-  const items = useMemo(
-    () => ids.map((id) => getProduct(id)).filter((p): p is Product => !!p),
-    [ids],
-  );
+  const products = useProducts();
+  const items = useMemo(() => {
+    const byId = new Map(products.map((p) => [p.id, p]));
+    return ids.map((id) => byId.get(id)).filter((p): p is Product => !!p);
+  }, [ids, products]);
   const columns = fontScale >= 1.35 ? 1 : 2;
   const cell = columns === 1 ? width - MARGIN * 2 : (width - MARGIN * 2 - GAP) / 2;
 

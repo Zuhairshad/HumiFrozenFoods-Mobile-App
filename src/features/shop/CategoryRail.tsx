@@ -1,7 +1,7 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { FilterChip } from '@/components/ui';
-import { categories } from '@/data';
+import { useCategories } from '@/hooks/useProducts';
 import type { CategoryFilter } from './filters';
 
 export interface CategoryRailProps {
@@ -9,13 +9,13 @@ export interface CategoryRailProps {
   onChange: (next: CategoryFilter) => void;
 }
 
-const ITEMS: { id: CategoryFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  ...categories.map((cat) => ({ id: cat.id as CategoryFilter, label: cat.title })),
-];
-
 /** Horizontal filled-capsule category selector (design 5.2). */
 function CategoryRailBase({ value, onChange }: CategoryRailProps) {
+  const categories = useCategories();
+  const items = useMemo<{ id: CategoryFilter; label: string }[]>(
+    () => [{ id: 'all', label: 'All' }, ...categories.map((cat) => ({ id: cat.id, label: cat.title }))],
+    [categories],
+  );
   return (
     <ScrollView
       horizontal
@@ -23,7 +23,7 @@ function CategoryRailBase({ value, onChange }: CategoryRailProps) {
       contentContainerStyle={styles.content}
       accessibilityRole="tablist"
     >
-      {ITEMS.map((item) => (
+      {items.map((item) => (
         <FilterChip
           key={item.id}
           label={item.label}

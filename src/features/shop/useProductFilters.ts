@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { router, useLocalSearchParams, useNavigation, useRoute } from 'expo-router';
+import { useProducts } from '@/hooks/useProducts';
 import {
   DEFAULT_FILTERS,
   activeRefinements,
@@ -38,12 +39,13 @@ export function toggleDietIn(current: ProductFilters, diet: Diet): ProductFilter
 export function useProductFilters() {
   const params = useLocalSearchParams<FilterParams>();
   const route = useRoute();
+  const products = useProducts();
 
   const parsed = parseFilters(params);
   const key = filtersKey(parsed);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the stable identity of `parsed`
   const filters = useMemo(() => parsed, [key]);
-  const results = useMemo(() => applyFilters(filters), [filters]);
+  const results = useMemo(() => applyFilters(filters, products), [filters, products]);
 
   const update = useCallback((patch: Partial<ProductFilters>) => {
     router.setParams(filtersToParams(patchFilters(filters, patch)));
@@ -94,9 +96,10 @@ export function useSheetFilters() {
   const params = useLocalSearchParams<FilterParams & { source?: string }>();
   const navigation = useNavigation();
   const source = Array.isArray(params.source) ? params.source[0] : params.source;
+  const products = useProducts();
 
   const [filters, setFilters] = useState<ProductFilters>(() => parseFilters(params));
-  const results = useMemo(() => applyFilters(filters), [filters]);
+  const results = useMemo(() => applyFilters(filters, products), [filters, products]);
 
   const commit = useCallback(
     (next: ProductFilters) => {

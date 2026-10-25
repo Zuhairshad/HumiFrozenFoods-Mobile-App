@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../../lib/api/http';
+import { createHttpEnquiryTransport, EnquirySendError } from './enquiry-http';
 
 export type EnquiryVariant = 'b2b' | 'salesRep' | 'contact';
 
@@ -172,7 +174,10 @@ export const localEnquiryTransport: EnquiryTransport = {
   },
 };
 
-let transport: EnquiryTransport = localEnquiryTransport;
+/** POST /v1/enquiries (honeypot `website` always empty). Selected when EXPO_PUBLIC_API_BASE_URL is set. */
+export const httpEnquiryTransport: EnquiryTransport = createHttpEnquiryTransport();
+
+let transport: EnquiryTransport = API_BASE_URL ? httpEnquiryTransport : localEnquiryTransport;
 
 export function setEnquiryTransport(next: EnquiryTransport): void {
   transport = next;
@@ -183,12 +188,15 @@ export function isEnquiryDeliveryConnected(): boolean {
   return transport.deliversToStaff;
 }
 
-/** Exact copy shown on the success state while submitting is not connected. */
-export const LOCAL_ENQUIRY_NOTICE = 'Saved on this device — submitting is not connected yet';
+/** Honest success copy per mode. Demo never claims delivery. */
+export const LOCAL_ENQUIRY_NOTICE = "Saved on this device — sending isn't connected in demo mode";
+export const LIVE_ENQUIRY_MESSAGE = "Thanks — we'll be in touch";
 
 export type SubmitEnquiryResult =
   | { ok: true; delivered: boolean }
   | { ok: false; errors?: EnquiryErrors; message?: string };
+
+const FIELDS = Object.keys(emptyEnquiry) as EnquiryField[];
 
 export async function submitEnquiry(
   variant: EnquiryVariant,
@@ -203,7 +211,12 @@ export async function submitEnquiry(
   try {
     await transport.send({ variant, submittedAt: new Date().toISOString(), values: picked });
     return { ok: true, delivered: transport.deliversToStaff };
-  } catch {
+  } catch (e) {
+    if (e instanceof EnquirySendError) {
+      const errors: EnquiryErrors = {};
+      for (const [k, msg] of Object.entries(e.fieldErrors)) if ((FIELDS as string[]).includes(k)) errors[k as EnquiryField] = msg;
+      return { ok: false, message: e.message, ...(Object.keys(errors).length ? { errors } : null) };
+    }
     return { ok: false, message: 'Check your connection and try again.' };
   }
 }

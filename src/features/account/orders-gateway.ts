@@ -1,5 +1,9 @@
-import { useOrdersStore } from '@/store/orders';
-import type { Order } from '@/types';
+import { isAppApiError } from '../../lib/api/errors';
+import { API_BASE_URL, getHttpClient } from '../../lib/api/http';
+import { fetchOrder, lookupOrder } from '../../lib/api/orders-client';
+import { useOrdersStore } from '../../store/orders';
+import type { Order } from '../../types';
+import { orderFromApi } from './order-mapping';
 import { readOrderExtras } from './order-utils';
 
 export interface OrderLookupRequest {
@@ -9,11 +13,11 @@ export interface OrderLookupRequest {
   contact: string;
 }
 
-export type OrderLookupFailure = 'invalid' | 'not-found' | 'unavailable';
+export type OrderLookupFailure = 'invalid' | 'not-found' | 'unavailable' | 'offline' | 'rate-limited';
 
 export type OrderLookupResult =
   | { ok: true; order: Order }
-  | { ok: false; reason: OrderLookupFailure };
+  | { ok: false; reason: OrderLookupFailure; retryAfter?: number };
 
 export interface OrdersGateway {
   /** Guest lookup. `not-found` covers both an unknown order and a contact mismatch (no enumeration). */
@@ -50,13 +54,38 @@ export const localOrdersGateway: OrdersGateway = {
   },
 };
 
-let active: OrdersGateway = localOrdersGateway;
+/** POST /v1/orders/lookup, then GET the order with the returned guest token and save it on device. */
+export const httpOrdersGateway: OrdersGateway = {
+  async lookup({ orderId, contact }) {
+    const number = orderId.trim();
+    const input = contact.trim();
+    if (!number || !input) return { ok: false, reason: 'invalid' };
+    try {
+      const client = getHttpClient();
+      const found = await lookupOrder(client, { orderNumber: number, ...(input.includes('@') ? { email: input } : { phone: input }) });
+      const remote = await fetchOrder(client, found.orderId, found.guestToken);
+      const store = useOrdersStore.getState();
+      const stored = orderFromApi(remote, store.getOrder(remote.orderNumber));
+      store.addOrder(stored, found.guestToken);
+      return { ok: true, order: stored };
+    } catch (e) {
+      if (!isAppApiError(e)) return { ok: false, reason: 'unavailable' };
+      if (e.status === 404) return { ok: false, reason: 'not-found' };
+      if (e.isRateLimited) return { ok: false, reason: 'rate-limited', retryAfter: e.retryAfter };
+      if (e.isNetwork) return { ok: false, reason: 'offline' };
+      if (e.status === 400) return { ok: false, reason: 'invalid' };
+      return { ok: false, reason: 'unavailable' };
+    }
+  },
+};
+
+let active: OrdersGateway = API_BASE_URL ? httpOrdersGateway : localOrdersGateway;
 
 export function getOrdersGateway(): OrdersGateway {
   return active;
 }
 
-/** Swap in the HTTP implementation once the server lookup exists. */
+/** Swap the gateway (tests). Defaults to HTTP when EXPO_PUBLIC_API_BASE_URL is set, else device-local. */
 export function setOrdersGateway(gateway: OrdersGateway): void {
   active = gateway;
 }

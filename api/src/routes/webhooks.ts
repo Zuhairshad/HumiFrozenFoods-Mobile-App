@@ -46,7 +46,7 @@ export function webhookRoutes(deps: FeatureDeps): Hono<AppEnv> {
     if (event.type === 'ignored') return 'ignored';
     if (event.metadata.source !== PAYMENT_SOURCE) return 'ignored';
 
-    const transition = await resolveTransition(event, logger);
+    const transition = resolveTransition(event, logger);
     if (transition === null) return 'ignored';
 
     const eventLog = logger.child({ eventId: event.id, eventType: event.type });
@@ -85,10 +85,7 @@ export function webhookRoutes(deps: FeatureDeps): Hono<AppEnv> {
     return 'applied';
   }
 
-  async function resolveTransition(
-    event: OrderEvent,
-    logger: Logger,
-  ): Promise<{ orderId: string; transition: PaymentTransition } | null> {
+  function resolveTransition(event: OrderEvent, logger: Logger): { orderId: string; transition: PaymentTransition } | null {
     const { orderId } = event.metadata;
     if (!orderId || !isObjectIdString(orderId)) {
       logger.warn({ eventId: event.id, eventType: event.type }, 'webhook_order_unknown');

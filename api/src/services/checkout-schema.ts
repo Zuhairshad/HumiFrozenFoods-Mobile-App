@@ -3,8 +3,8 @@ import { z } from 'zod';
 const MAX_LINES = 30;
 const MAX_PER_PRODUCT = 20;
 
-// C0/C1 controls and DEL. Newlines are rejected too (contract: control characters rejected).
-const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/;
+// Unicode Cc: C0/C1 controls and DEL. Newlines are rejected too (contract: control characters rejected).
+const CONTROL_CHARS = /\p{Cc}/u;
 
 const text = (max: number, min = 1) =>
   z

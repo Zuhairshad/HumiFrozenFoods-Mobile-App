@@ -226,13 +226,14 @@ function isWindow(value: unknown): value is SlotWindow {
 
 function readSlot(meta: Rec | null, note: string, placedAt: Date): { slot: StoredOrder['slot']; notes: string } {
   const match = SLOT_NOTE.exec(note);
-  const notes = (match ? note.slice(0, match.index) : note).trim();
+  const [, noteDate, noteWindow] = match ?? [];
+  const fromNote = noteDate && noteWindow && isWindow(noteWindow) && isRealDate(noteDate) ? { date: noteDate, window: noteWindow } : null;
+  const notes = (match && fromNote ? note.slice(0, match.index) : note).trim();
   const metaSlot = meta && isRec(meta.slot) ? meta.slot : null;
   if (metaSlot && typeof metaSlot.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(metaSlot.date) && isRealDate(metaSlot.date) && isWindow(metaSlot.window)) {
     return { slot: { date: metaSlot.date, window: metaSlot.window }, notes };
   }
-  const [, date, window] = match ?? [];
-  if (date && window && isWindow(window) && isRealDate(date)) return { slot: { date, window }, notes };
+  if (fromNote) return { slot: fromNote, notes };
   // Website orders carry no slot; the order date is the least misleading stand-in.
   return { slot: { date: placedAt.toISOString().slice(0, 10), window: 'morning' }, notes };
 }

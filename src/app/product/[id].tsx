@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { AppText, EmptyState, ListSection, Price, PressableScale, Rating } from '@/components/ui';
-import { getProduct, getRelatedProducts } from '@/data';
+import { relatedTo } from '@/data/selectors';
+import { penceToPounds } from '@/lib/format';
+import { useProduct, useProducts } from '@/hooks/useProducts';
 import { useTheme } from '@/hooks/useTheme';
 import { BUY_BAR_HEIGHT, BuyBar } from '@/features/product/BuyBar';
 import { cookingMethods, cookingNote } from '@/features/product/cooking';
@@ -14,6 +16,7 @@ import { FactStrip } from '@/features/product/FactStrip';
 import { ProductHeaderButtons } from '@/features/product/ProductHeaderButtons';
 import { ProductHero, SHEET_OVERLAP, useHeroHeight } from '@/features/product/ProductHero';
 import { ProductTile } from '@/features/shop/ProductTile';
+import { StockTag } from '@/features/shop/StockTag';
 import type { Product } from '@/types';
 
 const LONG_DESCRIPTION = 160;
@@ -73,7 +76,8 @@ function RelatedShelf({ products }: { products: Product[] }) {
 
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const product = id ? getProduct(String(id)) : undefined;
+  const product = useProduct(id ? String(id) : undefined);
+  const products = useProducts();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { c } = useTheme();
@@ -82,6 +86,7 @@ export default function ProductScreen() {
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.set(e.contentOffset.y);
   });
+  const related = useMemo(() => (product ? relatedTo(products, product.id, 8) : []), [products, product]);
 
   if (!product) {
     return (
@@ -100,7 +105,6 @@ export default function ProductScreen() {
 
   const tags = product.tags.filter((t) => !HIDDEN_TAGS.includes(t));
   const tagLine = tags.map((t) => (t === 'Halal Certified' ? 'Halal' : t)).join(' · ');
-  const related = getRelatedProducts(product.id, 8);
 
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
@@ -121,11 +125,13 @@ export default function ProductScreen() {
             <AppText variant="title1" numberOfLines={2} accessibilityRole="header">
               {product.name}
             </AppText>
-            <AppText variant="callout" color="labelSecondary">
-              {product.weight}
-            </AppText>
+            {product.weight ? (
+              <AppText variant="callout" color="labelSecondary">
+                {product.weight}
+              </AppText>
+            ) : null}
             <View style={styles.metaRow}>
-              <Rating value={product.rating} count={product.reviewCount} compact />
+              {product.reviewCount > 0 ? <Rating value={product.rating} count={product.reviewCount} compact /> : null}
               {tagLine ? (
                 <AppText variant="footnote" color="labelSecondary" style={styles.tagLine}>
                   {tagLine}
@@ -134,24 +140,35 @@ export default function ProductScreen() {
             </View>
           </View>
 
-          <View>
-            <Price value={product.price} size="lg" />
+          <View style={styles.priceBlock}>
+            <Price
+              value={product.price}
+              size="lg"
+              compareAt={product.compareAtPricePence ? penceToPounds(product.compareAtPricePence) : undefined}
+            />
             <AppText variant="footnote" color="labelSecondary">
               per pack
             </AppText>
+            {!product.inStock || product.lowStock ? (
+              <View style={styles.stock}>
+                <StockTag product={product} showLow />
+              </View>
+            ) : null}
           </View>
 
           <FactStrip product={product} />
 
-          <Description text={product.description} />
+          {product.description ? <Description text={product.description} /> : null}
 
           <View style={[styles.group, { backgroundColor: c.groupedBackground }]}>
             <ListSection>
-              <DisclosureRow title="Ingredients">
-                <AppText variant="callout" color="labelSecondary">
-                  {product.ingredients}
-                </AppText>
-              </DisclosureRow>
+              {product.ingredients ? (
+                <DisclosureRow title="Ingredients">
+                  <AppText variant="callout" color="labelSecondary">
+                    {product.ingredients}
+                  </AppText>
+                </DisclosureRow>
+              ) : null}
               <DisclosureRow title="Cooking instructions">
                 {cookingMethods.map((m) => (
                   <View key={m.title}>
@@ -195,6 +212,8 @@ const styles = StyleSheet.create({
   titleBlock: { gap: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 12, rowGap: 4, marginTop: 4 },
   tagLine: { flexShrink: 1 },
+  priceBlock: { alignItems: 'flex-start' },
+  stock: { marginTop: 8 },
   more: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   group: { borderRadius: 28, borderCurve: 'continuous', padding: 8 },
   related: { paddingTop: 32, gap: 12 },

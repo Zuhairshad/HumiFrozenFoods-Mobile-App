@@ -2,31 +2,36 @@ import { useRef, useState, type ComponentRef } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { AppText, Button, fireHaptic, Icon, ListSection, PressableScale } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
-import { PROMO_CODE, PROMO_PERCENT } from '@/lib/pricing';
-import { useCartStore } from '@/store/cart';
+import { formatPrice } from '@/lib/format';
+import { usePromoStore } from '@/store/promo';
 
-/** Inline-expanding promo code row (HUMI15 = 15% off the subtotal). */
-export function PromoRowInput() {
+export interface PromoRowInputProps {
+  /** Code the server accepted for this basket (from the quote), else null. */
+  appliedCode: string | null;
+  /** Server message for a rejected code (generic fallback applied upstream). */
+  rejection: string | null;
+  /** A quote with the typed code is in flight. */
+  checking?: boolean;
+  /** Discount in pence the server applied (shown in the chip). */
+  discountPence?: number;
+}
+
+/** Inline-expanding promo row. The server decides validity and amount; this only collects the code. */
+export function PromoRowInput({ appliedCode, rejection, checking, discountPence }: PromoRowInputProps) {
   const { c, type } = useTheme();
-  const applied = useCartStore((s) => s.promoApplied);
-  const applyPromo = useCartStore((s) => s.applyPromo);
-  const removePromo = useCartStore((s) => s.removePromo);
+  const pendingCode = usePromoStore((s) => s.code);
+  const setPromo = usePromoStore((s) => s.set);
+  const clearPromo = usePromoStore((s) => s.clear);
+  const applied = appliedCode !== null;
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
-  const [invalid, setInvalid] = useState(false);
+  const invalid = !!rejection && !applied;
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
 
   const submit = () => {
     if (!code.trim()) return;
-    if (applyPromo(code)) {
-      fireHaptic('success');
-      setInvalid(false);
-      setOpen(false);
-      setCode('');
-    } else {
-      fireHaptic('warning');
-      setInvalid(true);
-    }
+    fireHaptic('selection');
+    setPromo(code);
   };
 
   if (applied) {
@@ -35,16 +40,18 @@ export function PromoRowInput() {
         <View style={styles.row}>
           <Icon name="tag" fill size={20} color="tint" />
           <AppText variant="body" style={styles.grow} numberOfLines={1}>
-            {PROMO_CODE} · {PROMO_PERCENT}% off
+            {appliedCode}
+            {discountPence ? ` · -${formatPrice(discountPence / 100)}` : ''}
           </AppText>
           <PressableScale
             onPress={() => {
               fireHaptic('selection');
-              removePromo();
+              clearPromo();
+              setCode('');
             }}
             pressedOpacity={0.6}
             scaleTo={1}
-            accessibilityLabel={`Remove promo code ${PROMO_CODE}`}
+            accessibilityLabel={`Remove promo code ${appliedCode}`}
             style={styles.textButton}
           >
             <AppText variant="body" color="tint">
@@ -89,7 +96,6 @@ export function PromoRowInput() {
             value={code}
             onChangeText={(t) => {
               setCode(t.toUpperCase());
-              if (invalid) setInvalid(false);
             }}
             placeholder="Promo code"
             placeholderTextColor={c.labelTertiary}
@@ -101,11 +107,11 @@ export function PromoRowInput() {
             maxFontSizeMultiplier={1.6}
             style={[type.body, styles.input, { color: c.label }]}
           />
-          <Button title="Apply" size="sm" variant="tinted" onPress={submit} disabled={!code.trim()} />
+          <Button title="Apply" size="sm" variant="tinted" onPress={submit} loading={!!checking && !!pendingCode} disabled={!code.trim() || !!checking} />
         </View>
         {invalid ? (
           <AppText variant="footnote" color="destructive" accessibilityLiveRegion="polite" style={styles.error}>
-            That code isn&apos;t valid.
+            {rejection}
           </AppText>
         ) : null}
       </View>

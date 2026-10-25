@@ -1,4 +1,4 @@
-import { categories } from '@/data';
+import { categories } from '@/data/categories';
 import type { Product, ProductTag } from '@/types';
 
 const TAG_SHORT: Partial<Record<ProductTag, string>> = {

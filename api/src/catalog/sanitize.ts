@@ -118,7 +118,7 @@ export function cleanLine(input: string, maxLength: number): string {
   return collapseWhitespace(input).slice(0, maxLength).trim();
 }
 
-const REGEXP_SPECIALS = /[.*+?^${}()|[\]\\\/-]/g;
+const REGEXP_SPECIALS = /[.*+?^${}()|[\]\\-]/g;
 
 export function escapeRegExp(input: string): string {
   return input.replace(REGEXP_SPECIALS, '\\$&');

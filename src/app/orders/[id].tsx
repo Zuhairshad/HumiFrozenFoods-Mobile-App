@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { RefreshControl, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { AppText, EmptyState, FadeImage, ListRow, ListSection, Price, ScreenScroll } from '@/components/ui';
 import {
@@ -8,6 +8,8 @@ import {
   deriveStatus,
   formatDateTime,
   isActive,
+  isLiveOrder,
+  syncOrder,
 } from '@/features/account';
 import { useTheme } from '@/hooks/useTheme';
 import { useOrdersStore } from '@/store/orders';
@@ -23,6 +25,41 @@ export default function OrderTrackScreen() {
 
   const status = order ? deriveStatus(order, now) : undefined;
   const live = status ? isActive(status) : false;
+  const [refreshing, setRefreshing] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const orderNumber = order?.id;
+  const isLive = isLiveOrder(order);
+  const cancelled = order?.remoteStatus === 'cancelled';
+
+  const refresh = useCallback(async () => {
+    if (!orderNumber) return;
+    const res = await syncOrder(orderNumber);
+    setOffline(res.kind === 'offline');
+  }, [orderNumber]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setNow(Date.now());
+    await refresh();
+    setRefreshing(false);
+  }, [refresh]);
+
+  // Fresh status from the API on open and every 30 s while the order is active (stored snapshot offline).
+  useEffect(() => {
+    if (!isLive || !orderNumber) return;
+    let stop = false;
+    const run = () =>
+      void syncOrder(orderNumber).then((res) => {
+        if (!stop) setOffline(res.kind === 'offline');
+      });
+    run();
+    if (!live || cancelled) return () => void (stop = true);
+    const t = setInterval(run, TICK_MS);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [isLive, live, cancelled, orderNumber]);
 
   useEffect(() => {
     if (!live) return;
@@ -54,8 +91,24 @@ export default function OrderTrackScreen() {
   return (
     <>
       <Stack.Screen options={{ title: `Order ${order.id}` }} />
-      <ScreenScroll grouped>
+      <ScreenScroll grouped refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}>
         <View style={styles.stack}>
+          {cancelled || order.paymentStatus === 'failed' || order.paymentStatus === 'refunded' || order.paymentStatus === 'pending' || offline ? (
+            <View style={styles.pad} accessibilityLiveRegion="polite">
+              <AppText variant="footnote" color={cancelled || order.paymentStatus === 'failed' ? 'destructive' : 'labelSecondary'}>
+                {cancelled
+                  ? 'This order was cancelled.'
+                  : order.paymentStatus === 'failed'
+                    ? 'Payment for this order failed.'
+                    : order.paymentStatus === 'refunded'
+                      ? 'This order was refunded.'
+                      : order.paymentStatus === 'pending'
+                        ? 'Waiting for payment confirmation.'
+                        : ''}
+                {offline ? " You're offline. Showing the saved copy." : ''}
+              </AppText>
+            </View>
+          ) : null}
           <View style={styles.pad}>
             <StatusCard order={order} status={status} />
           </View>
