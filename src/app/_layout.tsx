@@ -15,7 +15,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '@/components/ui/Toast';
 import { BrandSplash, useAppReady } from '@/features/shell';
 import { AppStripeProvider } from '@/lib/stripe/StripeProvider';
+import { useCatalogSync } from '@/hooks/useProducts';
 import { useTheme } from '@/hooks/useTheme';
+import { useConfigSync } from '@/store/server-config';
 
 // Keep the native splash up until the brand splash overlay has laid out.
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -41,6 +43,9 @@ function AppShell() {
   const { c, isDark } = useTheme();
   const reduced = useReducedMotion();
   const ready = useAppReady();
+  // Start live data at launch (not per screen) so deep links to any route have data.
+  useCatalogSync();
+  useConfigSync();
   const [splashDone, setSplashDone] = useState(false);
   const reveal = useSharedValue(0);
 

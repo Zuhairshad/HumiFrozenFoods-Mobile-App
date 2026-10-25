@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { getHttpClient, isDemoMode } from '../../lib/api/http';
 import { postQuote } from '../../lib/api/quote-client';
 import type { PricedLine, Pricing, QuoteResponse, UnavailableLine } from '../../lib/api/types';
@@ -44,18 +44,13 @@ export function useQuote(lines: UseQuoteLine[], promoCode?: string | null): UseQ
   );
   useEffect(() => () => controller.dispose(), [controller]);
 
-  const req = useMemo(
-    () => buildQuoteRequest(lines, promoCode),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(lines.map((l) => [l.productId, l.quantity])), promoCode],
-  );
+  // `lines` must be referentially stable between renders (memoise at the call site).
+  const req = useMemo(() => buildQuoteRequest(lines, promoCode), [lines, promoCode]);
   useEffect(() => {
     if (!isDemoMode) controller.update(req);
   }, [controller, req]);
 
   const state = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
-  const linesRef = useRef(lines);
-  linesRef.current = lines;
   const refresh = useCallback(() => controller.refresh(), [controller]);
 
   return useMemo<UseQuoteResult>(() => {

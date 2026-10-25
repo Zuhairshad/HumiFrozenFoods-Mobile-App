@@ -46,7 +46,8 @@
           "merchantIdentifier": "merchant.com.humisfrozenfoods.app",
           "enableGooglePay": true
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

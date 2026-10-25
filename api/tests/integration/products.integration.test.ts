@@ -15,7 +15,7 @@ const FIXTURE = new URL('../fixtures/products.live.json', import.meta.url);
 
 let server: MongoMemoryServer;
 let client: MongoClient;
-let products: Collection<Document>;
+let products: Collection;
 let found: CommandStartedEvent[] = [];
 const business: BusinessConfig = testConfig().business;
 

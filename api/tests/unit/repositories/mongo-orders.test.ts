@@ -19,19 +19,18 @@ function setup(env: Record<string, string> = {}) {
     findOneAndUpdate: vi.fn(),
     find: vi.fn(),
   };
-  const collectionName = vi.fn((_name: string) => collection);
-  const db = { collection: collectionName } as unknown as Db;
+  const names: string[] = [];
+  const db = { collection: (name: string) => (names.push(name), collection) } as unknown as Db;
   const business = testConfig(env).business;
   const repo = createMongoOrdersRepository(db, business, { now: () => NOW });
-  return { repo, collection, collectionName, business };
+  return { repo, collection, names, business };
 }
 
 const appDoc = (extra: Record<string, unknown> = {}) => ({ ...toSiteDocument(newOrder(), { now: NOW }), _id: new ObjectId(OID), ...extra });
 
 describe('collection selection', () => {
   it('uses the configured orders collection name', () => {
-    const { collectionName } = setup({ ORDERS_COLLECTION: 'orders_staging' });
-    expect(collectionName).toHaveBeenCalledWith('orders_staging');
+    expect(setup({ ORDERS_COLLECTION: 'orders_staging' }).names).toEqual(['orders_staging']);
   });
 });
 

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { NewOrder, PricedLine } from '../../../src/domain/types.js';
 import { BadRequestError } from '../../../src/lib/errors.js';
 import { fromSiteDocument, toSiteDocument } from '../../../src/orders/site-order-mapper.js';
-import { newOrder, NOW, websiteDoc } from './fixtures.js';
+import { firstLine, newOrder, NOW, websiteDoc, without } from './fixtures.js';
 
 const ctx = { now: NOW };
 
@@ -63,13 +63,11 @@ describe('toSiteDocument', () => {
   });
 
   it('puts only the delivery line in the note when there are no user notes', () => {
-    const { notes: _omit, ...rest } = newOrder();
-    expect(toSiteDocument(rest, ctx).note).toBe('Delivery: 2026-03-05 afternoon');
+    expect(toSiteDocument(without(newOrder(), 'notes'), ctx).note).toBe('Delivery: 2026-03-05 afternoon');
   });
 
   it('omits optional keys instead of writing undefined', () => {
-    const { appVersion: _a, ...rest } = newOrder({ address: { line1: '1 High Street', city: 'London', postcode: 'AB1 2CD' } });
-    const doc = toSiteDocument(rest, ctx);
+    const doc = toSiteDocument(without(newOrder({ address: { line1: '1 High Street', city: 'London', postcode: 'AB1 2CD' } }), 'appVersion'), ctx);
     expect(doc.shipping_address.street_address).toBe('1 High Street');
     expect('app_version' in doc.app_meta).toBe(false);
     expect('address_line2' in doc.app_meta).toBe(false);
@@ -106,7 +104,7 @@ describe('toSiteDocument', () => {
     [123456789, 1234567.89],
   ])('converts %i pence to %d pounds exactly', (p, expected) => {
     const order = newOrder({
-      lines: [{ ...newOrder().lines[0]!, unitPricePence: p, quantity: 1, lineTotalPence: p }],
+      lines: [{ ...firstLine(), unitPricePence: p, quantity: 1, lineTotalPence: p }],
       pricing: { ...newOrder().pricing, subtotalPence: p, deliveryPence: 0, totalPence: p },
     });
     const doc = toSiteDocument(order, ctx);
@@ -118,7 +116,7 @@ describe('toSiteDocument', () => {
   it('is exact for every price from 0.00 to 200.00', () => {
     for (let p = 0; p <= 20_000; p += 1) {
       const order = newOrder({
-        lines: [{ ...newOrder().lines[0]!, unitPricePence: p, quantity: 1, lineTotalPence: p }],
+        lines: [{ ...firstLine(), unitPricePence: p, quantity: 1, lineTotalPence: p }],
         pricing: { ...newOrder().pricing, subtotalPence: p, deliveryPence: 0, totalPence: p },
       });
       expect(toSiteDocument(order, ctx).amount).toBe(Number((p / 100).toFixed(2)));
@@ -349,8 +347,7 @@ describe('fromSiteDocument', () => {
     });
 
     it('omits notes when only the delivery line exists', () => {
-      const { notes: _n, ...rest } = newOrder();
-      const stored = fromSiteDocument({ ...toSiteDocument(rest, ctx), _id: new ObjectId() });
+      const stored = fromSiteDocument({ ...toSiteDocument(without(newOrder(), 'notes'), ctx), _id: new ObjectId() });
       expect('notes' in (stored ?? {})).toBe(false);
     });
   });

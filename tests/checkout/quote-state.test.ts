@@ -45,7 +45,7 @@ describe('createQuoteController', () => {
   const req = (q: number) => buildQuoteRequest([{ productId: 'a', quantity: q }]);
 
   it('debounces rapid updates into one fetch', async () => {
-    const fetchQuote = vi.fn(async () => quote(100));
+    const fetchQuote = vi.fn(async (_r: unknown) => quote(100));
     const c = createQuoteController({ fetchQuote, debounceMs: 300 });
     c.update(req(1));
     c.update(req(2));
@@ -61,7 +61,7 @@ describe('createQuoteController', () => {
   it('aborts the in-flight request and ignores its late result', async () => {
     const resolvers: ((q: QuoteResponse) => void)[] = [];
     const signals: AbortSignal[] = [];
-    const fetchQuote = vi.fn((_r, s: AbortSignal) => {
+    const fetchQuote = vi.fn((_r: unknown, s: AbortSignal) => {
       signals.push(s);
       return new Promise<QuoteResponse>((res) => resolvers.push(res));
     });

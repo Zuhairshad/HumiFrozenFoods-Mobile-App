@@ -150,7 +150,10 @@ describe('stock flags', () => {
     [{ quantity: 2.9 }, true, true, 2],
     [{ quantity: undefined, in_stock: false }, false, false, null],
   ])('%j -> inStock %s lowStock %s stock %s', (fields, inStock, lowStock, stock) => {
-    const record = ok(base({ quantity: undefined, in_stock: undefined, ...fields }));
+    const doc = base();
+    delete doc['quantity'];
+    delete doc['in_stock'];
+    const record = ok(Object.assign(doc, fields));
     expect(record.inStock).toBe(inStock);
     expect(record.lowStock).toBe(lowStock);
     expect(record.stock).toBe(stock);

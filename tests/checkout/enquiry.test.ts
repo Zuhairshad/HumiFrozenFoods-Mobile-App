@@ -33,7 +33,7 @@ describe('enquiry http transport', () => {
     const limited = createHttpEnquiryTransport(() => client(async () => new Response(JSON.stringify({ error: { code: 'rate_limited', message: 'x' } }), { status: 429, headers: { 'Retry-After': '7200' } })));
     await expect(limited.send({ ...base, variant: 'contact', values: {} })).rejects.toMatchObject({ kind: 'rate_limited', message: expect.stringContaining('2 hours') });
     const bad = createHttpEnquiryTransport(() => client(async () => new Response(JSON.stringify({ error: { code: 'validation_failed', message: 'Bad', details: [{ path: 'business.name', message: 'Too short' }] } }), { status: 400 })));
-    const e = await bad.send({ ...base, variant: 'b2b', values: {} }).catch((x) => x as EnquirySendError);
+    const e = (await bad.send({ ...base, variant: 'b2b', values: {} }).catch((x) => x)) as EnquirySendError;
     expect(e).toBeInstanceOf(EnquirySendError);
     expect(e.fieldErrors).toEqual({ businessName: 'Too short' });
   });

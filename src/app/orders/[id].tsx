@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl } from 'react-native';
-import { StyleSheet, View } from 'react-native';
+import { RefreshControl, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { AppText, EmptyState, FadeImage, ListRow, ListSection, Price, ScreenScroll } from '@/components/ui';
 import {
@@ -47,12 +46,20 @@ export default function OrderTrackScreen() {
 
   // Fresh status from the API on open and every 30 s while the order is active (stored snapshot offline).
   useEffect(() => {
-    if (!isLive) return;
-    void refresh();
-    if (!live || cancelled) return;
-    const t = setInterval(() => void refresh(), TICK_MS);
-    return () => clearInterval(t);
-  }, [isLive, live, cancelled, refresh]);
+    if (!isLive || !orderNumber) return;
+    let stop = false;
+    const run = () =>
+      void syncOrder(orderNumber).then((res) => {
+        if (!stop) setOffline(res.kind === 'offline');
+      });
+    run();
+    if (!live || cancelled) return () => void (stop = true);
+    const t = setInterval(run, TICK_MS);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [isLive, live, cancelled, orderNumber]);
 
   useEffect(() => {
     if (!live) return;

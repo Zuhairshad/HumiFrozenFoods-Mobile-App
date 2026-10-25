@@ -1,7 +1,18 @@
 import { ObjectId } from 'mongodb';
 import type { OrdersRepository } from '../../../src/domain/ports.js';
-import type { NewOrder, PaymentTransition, StoredOrder } from '../../../src/domain/types.js';
+import type { NewOrder, PricedLine, StoredOrder } from '../../../src/domain/types.js';
 import { fromSiteDocument, toSiteDocument } from '../../../src/orders/site-order-mapper.js';
+
+export function firstLine(order: NewOrder = newOrder()): PricedLine {
+  const [line] = order.lines;
+  if (!line) throw new Error('fixture has no lines');
+  return line;
+}
+
+/** Copy of an object without one key, typed so the key really is gone. */
+export function without<T extends object, K extends keyof T>(value: T, key: K): Omit<T, K> {
+  return Object.fromEntries(Object.entries(value).filter(([k]) => k !== key)) as Omit<T, K>;
+}
 
 export const NOW = new Date('2026-03-01T10:00:00.000Z');
 
@@ -52,7 +63,9 @@ export function websiteDoc(overrides: Record<string, unknown> = {}): Record<stri
 }
 
 /** In-memory OrdersRepository for route tests. App orders go through the real mapper. */
-export function fakeOrders(): OrdersRepository & { seed(order: StoredOrder): void; calls: string[] } {
+export type FakeOrders = OrdersRepository & { seed(order: StoredOrder): void; calls: string[] };
+
+export function fakeOrders(): FakeOrders {
   const byId = new Map<string, StoredOrder>();
   const calls: string[] = [];
   return {
@@ -76,7 +89,7 @@ export function fakeOrders(): OrdersRepository & { seed(order: StoredOrder): voi
       return Promise.resolve([...byId.values()].find((o) => o.orderNumber === number) ?? null);
     },
     attachPaymentIntent: () => Promise.resolve(),
-    applyPaymentTransition: (_id: string, _t: PaymentTransition) => Promise.resolve(null),
+    applyPaymentTransition: () => Promise.resolve(null),
     findStalePending: () => Promise.resolve([]),
     orderNumberExists: (n) => Promise.resolve([...byId.values()].some((o) => o.orderNumber === n)),
   };

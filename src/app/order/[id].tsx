@@ -13,7 +13,7 @@ import { fetchOrder } from '@/lib/api/orders-client';
 import { formatPrice } from '@/lib/format';
 import { useOrdersStore } from '@/store/orders';
 
-type Phase = 'idle' | 'confirming' | 'delayed' | 'settled';
+type Phase = 'polling' | 'delayed';
 
 export default function OrderConfirmationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -22,7 +22,7 @@ export default function OrderConfirmationScreen() {
   const order = useOrdersStore((s) => (id ? s.orders.find((o) => o.id.toUpperCase() === id.toUpperCase()) : undefined));
   const patchOrder = useOrdersStore((s) => s.patchOrder);
   const token = useOrdersStore((s) => s.getToken(order?.remoteId));
-  const [phase, setPhase] = useState<Phase>('idle');
+  const [phase, setPhase] = useState<Phase>('polling');
   const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -34,12 +34,11 @@ export default function OrderConfirmationScreen() {
 
   // Poll GET /v1/orders/:id (3 s x 10) with the guest token. The server, via the Stripe webhook, is the
   // only thing that can say "paid"; PaymentSheet success alone never does.
-  const startPolling = useCallback(() => {
+  const runPoll = useCallback(() => {
     if (!live || !orderId || !remoteId || !token) return;
     abortRef.current?.abort();
     const ctl = new AbortController();
     abortRef.current = ctl;
-    setPhase('confirming');
     void pollOrderPayment({
       signal: ctl.signal,
       fetchOrder: (signal) => fetchOrder(getHttpClient(), remoteId, token, signal),
@@ -51,13 +50,12 @@ export default function OrderConfirmationScreen() {
       onError: () => setOffline(true),
     }).then((outcome) => {
       if (outcome.kind === 'cancelled') return;
-      setPhase(outcome.kind === 'timeout' ? 'delayed' : 'settled');
+      setPhase(outcome.kind === 'timeout' ? 'delayed' : 'polling');
     });
   }, [live, orderId, remoteId, token, patchOrder]);
 
   useEffect(() => {
-    if (live && paymentStatus === 'pending') startPolling();
-    else if (live) setPhase('settled');
+    if (live && paymentStatus === 'pending') runPoll();
     return () => abortRef.current?.abort();
     // Only (re)start when the order identity changes, not on every status patch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -69,7 +67,6 @@ export default function OrderConfirmationScreen() {
     const res = await syncOrder(orderId);
     setOffline(res.kind === 'offline');
     setRefreshing(false);
-    if (res.kind === 'updated' && res.order.paymentStatus !== 'pending') setPhase('settled');
   }, [orderId]);
 
   const onDone = useCallback(() => router.replace('/'), []);

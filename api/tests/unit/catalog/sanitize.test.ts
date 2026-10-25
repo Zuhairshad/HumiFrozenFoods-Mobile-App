@@ -63,7 +63,7 @@ describe('htmlToText', () => {
   });
 
   it('truncates at a word boundary with an ellipsis', () => {
-    const text = htmlToText(`${'word '.repeat(50)}`, 40);
+    const text = htmlToText('word '.repeat(50), 40);
     expect(text.length).toBeLessThanOrEqual(40);
     expect(text.endsWith('…')).toBe(true);
     expect(text).not.toMatch(/wor…$/);
