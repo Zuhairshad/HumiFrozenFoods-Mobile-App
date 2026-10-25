@@ -2,7 +2,6 @@ export { TodayHeader } from './TodayHeader';
 export { TodayCard } from './TodayCard';
 export { QuickGlyphRow } from './QuickGlyphRow';
 export { GlyphChip } from './GlyphChip';
-export { PromoRow } from './PromoRow';
 export { Shelf } from './Shelf';
 export { SquareTile } from './SquareTile';
 export { PortraitTile } from './PortraitTile';

@@ -1,261 +1,67 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchOrder } from '@/lib/api/orders-client';
-import { isGatewayError } from '@/lib/api/errors';
-import { getStripeGateway, makeIdempotencyKey, type PaymentIntentResult } from '@/lib/api/stripe-gateway';
-import type { OrderDraft, PricingDto } from '@/lib/api/types';
-import { formatPrice } from '@/lib/format';
-import { useOrdersStore, type StoredOrder } from '@/store/orders';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useTheme } from '@/hooks/useTheme';
-import type { PaymentSheetBilling } from './paymentSheetTypes';
-import { formatSlotLabel } from './slots';
+import { getStripeGateway } from '@/lib/api/gateways';
+import { useOrdersStore } from '@/store/orders';
+import { useServerConfig } from '@/store/server-config';
+import { formatPrice } from '@/lib/format';
+import type { OrderDraft } from '@/lib/api/types';
+import { createCheckoutMachine, type CheckoutState, type PayOptions } from './checkout-machine';
+import { buildOrderRecord } from './order-record';
+import type { PaymentSheetColors } from './paymentSheetTypes';
 import { usePaymentSheetAdapter } from './usePaymentSheetAdapter';
 
-export type CheckoutStatus =
-  | 'idle'
-  | 'creating' // asking our server to price + create the order and PaymentIntent
-  | 'presenting' // PaymentSheet is on screen
-  | 'confirming' // sheet returned success; recording the order / asking the server
-  | 'succeeded'
-  | 'failed'
-  | 'cancelled';
+export * from './checkout-machine';
 
-export type CheckoutErrorKind =
-  | 'network' // offline / timeout; safe to retry
-  | 'price_changed' // server total differs from what the user was shown; nothing charged, retry to accept
-  | 'validation' // server rejected the draft (bad promo, unavailable product, ...)
-  | 'server'
-  | 'declined' // card declined or payment failed in the sheet
-  | 'payment' // sheet could not be initialised
-  | 'unsupported' // web / no Stripe key
-  | 'unknown';
-
-export interface CheckoutError {
-  kind: CheckoutErrorKind;
-  title: string;
-  message: string;
-  retryable: boolean;
-}
-
-export interface CheckoutSuccess {
-  orderNumber: string;
-  remoteId: string;
-  pricing: PricingDto;
-  demo: boolean;
-}
-
-export interface CheckoutState {
-  status: CheckoutStatus;
-  error?: CheckoutError;
-  result?: CheckoutSuccess;
-}
-
-const IDLE: CheckoutState = { status: 'idle' };
-
-interface Session {
-  fingerprint: string;
-  idempotencyKey: string;
-  intent?: PaymentIntentResult;
-}
-
-export interface PayOptions {
-  /** Total in pence the user was shown. A different server total aborts before PaymentSheet opens. */
-  expectedTotalPence?: number;
-}
-
-const penceToPounds = (p: number) => Math.round(p) / 100;
-
-function toError(e: unknown): CheckoutError {
-  if (isGatewayError(e)) {
-    switch (e.kind) {
-      case 'network':
-        return { kind: 'network', title: "You're offline", message: e.message, retryable: true };
-      case 'validation':
-        return { kind: 'validation', title: "We couldn't place that order", message: e.message, retryable: false };
-      case 'unsupported':
-        return { kind: 'unsupported', title: 'Payments unavailable', message: e.message, retryable: false };
-      default:
-        return { kind: 'server', title: 'Something went wrong', message: e.message, retryable: true };
-    }
-  }
-  return { kind: 'unknown', title: 'Something went wrong', message: 'Please try again in a moment.', retryable: true };
-}
-
-function buildOrder(draft: OrderDraft, res: PaymentIntentResult, paymentStatus: StoredOrder['paymentStatus']): StoredOrder {
-  const { address, contact, slot } = draft;
-  const addressLine = [address.line1, address.line2, address.city, address.postcode].filter(Boolean).join(', ');
-  return {
-    id: res.orderNumber,
-    placedAt: new Date().toISOString(),
-    lines: res.lines.map((l) => ({
-      productId: l.productId,
-      name: l.name,
-      price: penceToPounds(l.unitPricePence),
-      quantity: l.quantity,
-      image: l.image,
-    })),
-    subtotal: penceToPounds(res.pricing.subtotalPence),
-    delivery: penceToPounds(res.pricing.deliveryPence),
-    discount: penceToPounds(res.pricing.discountPence),
-    total: penceToPounds(res.pricing.totalPence),
-    status: 'placed',
-    address: addressLine,
-    contact,
-    slot: { date: slot.date, window: slot.window, label: formatSlotLabel(slot.date, slot.window) },
-    paymentStatus,
-    remoteId: res.orderId,
-    guestToken: res.guestToken,
-  };
-}
-
-/**
- * Drives the whole pay flow: server creates order + PaymentIntent, PaymentSheet collects payment.
- * `pay()` is idempotent: while a run is in flight further calls return the same promise, and a
- * retry of an unchanged draft reuses the order/PaymentIntent already created (no duplicate orders).
- * In demo mode (no EXPO_PUBLIC_API_BASE_URL) the sheet is skipped and no payment is claimed.
- */
+/** React binding for the checkout machine. */
 export function useStripeCheckout() {
-  const gateway = getStripeGateway();
-  const demo = gateway.mode === 'mock';
   const sheet = usePaymentSheetAdapter();
   const { c, isDark } = useTheme();
+  const { config } = useServerConfig();
   const addOrder = useOrdersStore((s) => s.addOrder);
 
-  const [state, setState] = useState<CheckoutState>(IDLE);
-  /** Latest server-side pricing for the current draft (source of truth for displayed totals). */
-  const [quote, setQuote] = useState<PricingDto | null>(null);
-  const inFlight = useRef<Promise<CheckoutState> | null>(null);
-  const session = useRef<Session | null>(null);
-  const colorsRef = useRef({ c, isDark });
+  // Latest values are read lazily so the machine (and its idempotency session) outlives re-renders.
+  const live = useRef({ sheet, c, isDark, payments: config.payments.enabled });
   useEffect(() => {
-    colorsRef.current = { c, isDark };
-  }, [c, isDark]);
+    live.current = { sheet, c, isDark, payments: config.payments.enabled };
+  });
 
-  const run = useCallback(
-    async (draft: OrderDraft, opts?: PayOptions): Promise<CheckoutState> => {
-      const settle = (next: CheckoutState): CheckoutState => {
-        setState(next);
-        return next;
-      };
-
-      if (!demo && !sheet.available) {
-        return settle({
-          status: 'failed',
-          error: {
-            kind: 'unsupported',
-            title: 'Payments unavailable',
-            message: 'Card payments need the Humi app build with Stripe configured.',
-            retryable: false,
+  const machine = useMemo(
+    () =>
+      createCheckoutMachine({
+        gateway: getStripeGateway(),
+        sheet: {
+          get available() {
+            return live.current.sheet.available;
           },
-        });
-      }
-
-      const fingerprint = JSON.stringify(draft);
-      if (session.current?.fingerprint !== fingerprint) {
-        session.current = { fingerprint, idempotencyKey: makeIdempotencyKey() };
-      }
-      const current = session.current;
-
-      try {
-        setState({ status: 'creating' });
-        const intent = (current.intent ??= await gateway.createPaymentIntent(draft, { idempotencyKey: current.idempotencyKey }));
-
-        setQuote(intent.pricing);
-        if (opts?.expectedTotalPence !== undefined && intent.pricing.totalPence !== opts.expectedTotalPence) {
-          return settle({
-            status: 'failed',
-            error: {
-              kind: 'price_changed',
-              title: 'Price updated',
-              message: `Your total is now ${formatPrice(penceToPounds(intent.pricing.totalPence))}. Nothing has been charged. Tap Pay to continue.`,
-              retryable: true,
-            },
-          });
-        }
-
-        let paymentStatus: StoredOrder['paymentStatus'] = 'demo';
-        if (!demo) {
-          const { c: cc, isDark: dark } = colorsRef.current;
-          const billing: PaymentSheetBilling = {
-            name: draft.contact.name,
-            email: draft.contact.email,
-            phone: draft.contact.phone,
-            line1: draft.address.line1,
-            line2: draft.address.line2,
-            city: draft.address.city,
-            postcode: draft.address.postcode,
+          get unavailableMessage() {
+            return live.current.sheet.unavailableMessage;
+          },
+          run: (args) => live.current.sheet.run(args),
+        },
+        getColors: (): PaymentSheetColors => {
+          const { c: cc, isDark: dark } = live.current;
+          return {
+            tint: cc.tint,
+            groupedBackground: cc.groupedBackground,
+            cell: cc.cell,
+            elevated: cc.elevated,
+            separator: cc.separatorOpaque,
+            label: cc.label,
+            labelSecondary: cc.labelSecondary,
+            labelTertiary: cc.labelTertiary,
+            destructive: cc.destructive,
+            isDark: dark,
           };
-          const outcome = await sheet.run({
-            clientSecret: intent.clientSecret,
-            billing,
-            colors: {
-              tint: cc.tint,
-              groupedBackground: cc.groupedBackground,
-              cell: cc.cell,
-              elevated: cc.elevated,
-              separator: cc.separatorOpaque,
-              label: cc.label,
-              labelSecondary: cc.labelSecondary,
-              labelTertiary: cc.labelTertiary,
-              destructive: cc.destructive,
-              isDark: dark,
-            },
-            onPresenting: () => setState({ status: 'presenting' }),
-          });
-          if (outcome.kind === 'cancelled') return settle({ status: 'cancelled' });
-          if (outcome.kind === 'failed') {
-            const declined = outcome.declineCode !== undefined || outcome.code === 'Failed';
-            return settle({
-              status: 'failed',
-              error: {
-                kind: declined ? 'declined' : 'payment',
-                title: "Payment didn't go through",
-                message: outcome.message,
-                retryable: true,
-              },
-            });
-          }
-          // Client success is not proof of payment: the server flips the order to paid via webhook.
-          setState({ status: 'confirming' });
-          paymentStatus = 'pending';
-          try {
-            const remote = await fetchOrder(intent.orderId, intent.guestToken);
-            if (remote?.paymentStatus === 'paid') paymentStatus = 'paid';
-          } catch {
-            /* best effort; the confirmation screen keeps polling */
-          }
-        } else {
-          setState({ status: 'confirming' });
-        }
-
-        addOrder(buildOrder(draft, intent, paymentStatus));
-        session.current = null;
-        return settle({
-          status: 'succeeded',
-          result: { orderNumber: intent.orderNumber, remoteId: intent.orderId, pricing: intent.pricing, demo },
-        });
-      } catch (e) {
-        return settle({ status: 'failed', error: toError(e) });
-      }
-    },
-    [addOrder, demo, gateway, sheet],
+        },
+        paymentsEnabled: () => live.current.payments,
+        recordOrder: (draft, intent) => addOrder(buildOrderRecord(draft, intent), intent.demo ? undefined : intent.guestToken),
+        formatPence: (p) => formatPrice(p / 100),
+      }),
+    [addOrder],
   );
 
-  const pay = useCallback(
-    (draft: OrderDraft, opts?: PayOptions): Promise<CheckoutState> => {
-      if (inFlight.current) return inFlight.current;
-      const p = run(draft, opts).finally(() => {
-        inFlight.current = null;
-      });
-      inFlight.current = p;
-      return p;
-    },
-    [run],
-  );
-
-  const reset = useCallback(() => {
-    if (!inFlight.current) setState(IDLE);
-  }, []);
-
+  const state: CheckoutState = useSyncExternalStore(machine.subscribe, machine.getState, machine.getState);
+  const pay = useCallback((draft: OrderDraft, opts?: PayOptions) => machine.pay(draft, opts), [machine]);
   const busy = state.status === 'creating' || state.status === 'presenting' || state.status === 'confirming';
-  return { pay, state, reset, busy, demo, quote };
+  return { pay, state, reset: machine.reset, busy, demo: machine.demo, sheetAvailable: sheet.available, sheetUnavailableMessage: sheet.unavailableMessage };
 }

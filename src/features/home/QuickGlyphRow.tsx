@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { categories } from '@/data';
+import { useCategories } from '@/hooks/useProducts';
 import type { IconName } from '@/components/ui';
 import { GlyphChip } from './GlyphChip';
 
@@ -14,6 +14,7 @@ const SHORT_LABEL: Record<string, string> = {
 
 export const QuickGlyphRow = memo(function QuickGlyphRow() {
   const router = useRouter();
+  const categories = useCategories();
 
   const items = useMemo(() => {
     const cats = categories.slice(0, 4).map((cat) => ({
@@ -40,7 +41,7 @@ export const QuickGlyphRow = memo(function QuickGlyphRow() {
         onPress: () => router.push({ pathname: '/shop', params: { quick: '1' } }),
       },
     ];
-  }, [router]);
+  }, [router, categories]);
 
   return (
     <ScrollView

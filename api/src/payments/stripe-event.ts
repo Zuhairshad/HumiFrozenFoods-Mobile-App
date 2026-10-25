@@ -4,6 +4,9 @@ import type { PaymentEvent } from '../domain/ports.js';
 /** Stamped on every PaymentIntent this API creates; the webhook ignores anything without it. */
 export const PAYMENT_SOURCE = 'humi-mobile-app';
 
+/** PaymentTransition requires an intent id; used when an order is cancelled before any intent exists (the repository accepts it only for orders with no stored intent). */
+export const NO_PAYMENT_INTENT_ID = 'pi_none';
+
 /** Stripe's own default; the signature timestamp must be at most this old. */
 export const WEBHOOK_TOLERANCE_SECONDS = 300;
 

@@ -5,6 +5,8 @@ import { useTheme } from '@/hooks/useTheme';
 
 interface Props {
   added: boolean;
+  /** Out of stock: dimmed and not pressable. */
+  disabled?: boolean;
   onPress: () => void;
   accessibilityLabel: string;
   /** 32 for tiles; 40 for the Today card bar. */
@@ -16,6 +18,7 @@ interface Props {
 /** Round add button. Solid semi-transparent fill instead of blur (no blur inside list items). */
 export const MiniAddButton = memo(function MiniAddButton({
   added,
+  disabled = false,
   onPress,
   accessibilityLabel,
   size = 32,
@@ -26,13 +29,15 @@ export const MiniAddButton = memo(function MiniAddButton({
   return (
     <PressableScale
       onPress={onPress}
+      disabled={disabled}
+      accessibilityState={{ disabled }}
       haptic="light"
       scaleTo={0.9}
       accessibilityLabel={accessibilityLabel}
       style={{ width: size, height: size, borderRadius: size / 2 }}
       hitSlop={size === 32 ? 6 : 2}
     >
-      <View style={[StyleSheet.absoluteFill, { borderRadius: size / 2, backgroundColor: fill, opacity: tone === 'solid' ? 1 : 0.86 }]} />
+      <View style={[StyleSheet.absoluteFill, { borderRadius: size / 2, backgroundColor: fill, opacity: disabled ? 0.4 : tone === 'solid' ? 1 : 0.86 }]} />
       <View style={styles.center}>
         <Icon name={added ? 'checkmark' : 'plus'} size={size === 32 ? 16 : 18} weight="bold" color={c.tint} />
       </View>

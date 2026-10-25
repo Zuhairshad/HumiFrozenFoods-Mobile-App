@@ -2,6 +2,25 @@
 
 A premium shopping app for [Humi's Frozen Foods](https://humisfrozenfoods.com/): browse the frozen snack range (samosas, spring rolls, kebabs, tikki and more), save favourites, build a basket, check out and track an order. It runs on **iOS, Android and the web** from a single codebase.
 
+The repository has two parts:
+
+- the **Expo app** (this folder), and
+- a **Hono + MongoDB + Stripe API** in [`api/`](api/README.md) that reads the existing website's catalogue and orders and takes card payments through Stripe.
+
+**Status:** work in progress, not launched. Payments must not go live before the owner's checklist ([`docs/SETUP.md`](docs/SETUP.md)) and a human security review ([`docs/SECURITY.md`](docs/SECURITY.md)) are complete. Without `EXPO_PUBLIC_API_BASE_URL` the app runs in a clearly labelled demo mode with bundled data.
+
+## Documentation
+
+| Document | For |
+| --- | --- |
+| [`docs/SETUP.md`](docs/SETUP.md) | Owner's step-by-step checklist: MongoDB Atlas, Stripe, business rules, keys, EAS builds, go-live |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, residual risks, issues on the existing website API, pre-launch review |
+| [`docs/RUNBOOK.md`](docs/RUNBOOK.md) | Operating the API: health checks, failures, rotating secrets, disabling payments, incidents |
+| [`docs/api-contract.md`](docs/api-contract.md) | The app/API contract (single source of truth) |
+| [`docs/site-contract.md`](docs/site-contract.md) | Research notes on the existing website and its API |
+| [`docs/DESIGN-V2.md`](docs/DESIGN-V2.md), [`ARCHITECTURE.md`](ARCHITECTURE.md) | Design spec and contributor rules |
+| [`api/README.md`](api/README.md) | API layout, environment variables, conventions |
+
 The look is deliberately sleek: a warm cream canvas, white cards with soft teal shadows, immersive deep-teal hero sections, and gold used sparingly for the one primary action on a screen.
 
 ## Tech stack
@@ -17,6 +36,9 @@ The look is deliberately sleek: a warm cream canvas, white cards with soft teal 
 | Images | expo-image |
 | Haptics | expo-haptics (no-op on web) |
 | Fonts | Playfair Display (display), Inter (UI) via `@expo-google-fonts` |
+| Payments | Stripe PaymentSheet (`@stripe/stripe-react-native`), PaymentIntents created by the API |
+| API | Hono, zod, MongoDB driver, pino, Vitest (in `api/`) |
+| Builds | EAS Build / Submit (`eas.json`) |
 | Web | react-native-web |
 
 > Expo changes every SDK. Before using an Expo or React Native API you are unsure about, check <https://docs.expo.dev/versions/v58.0.0/> or <https://docs.expo.dev/llms.txt>. Always install packages with `npx expo install <package>` so versions match the SDK.
@@ -35,7 +57,26 @@ Then in the terminal that opens the dev server:
 - press `w` to open it in the browser
 - or scan the QR code with **Expo Go** on a real phone (same Wi-Fi as your computer)
 
-Expo Go notes: Expo Go bundles a fixed set of native modules. Everything this app uses ships inside Expo Go for SDK 58, so no custom build is needed. If you add a library with its own native code, you will need a development build (`npx expo run:ios`, `npx expo run:android`, or `eas build --profile development`). If the QR code does not connect, try `npx expo start --tunnel`.
+To use a real API (run it first, see [`api/README.md`](api/README.md)), pass its LAN address; `localhost` does not work from a phone:
+
+```bash
+EXPO_PUBLIC_API_BASE_URL=http://<your-LAN-ip>:3000 npx expo start
+```
+
+Copy `.env.example` to `.env.local` to keep these values (git-ignored). **Every `EXPO_PUBLIC_*` value is shipped inside the app and is public. Never put secrets in them.**
+
+Expo Go notes: Expo Go bundles a fixed set of native modules. Card payments through the Stripe PaymentSheet can work there, but **Apple Pay and Google Pay need a development build**, as does any library with its own native code (`eas build --profile development`, see [`docs/SETUP.md`](docs/SETUP.md) section E; the profiles are in `eas.json`). If the QR code does not connect, try `npx expo start --tunnel`.
+
+### Running the API
+
+```bash
+cd api && npm install && cp .env.example .env   # fill in values; never commit .env
+npm run dev                                      # http://localhost:3000
+```
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request: app typecheck, lint and web-export smoke test; API typecheck, lint, unit and integration tests (the integration tests use an in-memory MongoDB); a non-blocking `npm audit`; and a heuristic secret scan. Dependabot opens weekly update PRs.
 
 ### Scripts
 
@@ -46,13 +87,17 @@ Expo Go notes: Expo Go bundles a fixed set of native modules. Everything this ap
 | `npm run typecheck` | `tsc --noEmit` (strict TypeScript check) |
 | `npm run lint` | `expo lint` (ESLint with the Expo config, see `eslint.config.js`) |
 | `npx expo-doctor` | Diagnose dependency / config problems |
-| `npx expo install --fix` | Repair package versions that drifted from the SDK |
+| `npx expo install --check` | Report packages that drifted from the SDK (read-only); `--fix` repairs them |
 
 Run `npm run typecheck` and `npm run lint` before you commit.
 
 ## Folder structure
 
 ```
+api/                    Hono API (own package.json, tests, README); excluded from the app's tsc/eslint
+docs/                   Contracts, design spec, SETUP / SECURITY / RUNBOOK
+eas.json                EAS build and submit profiles
+.github/                CI workflow and Dependabot config
 assets/                 App icon, splash, Android adaptive icon layers, favicon
 src/
   app/                  Routes only (Expo Router). Every file here is a screen.
@@ -139,7 +184,7 @@ Display text uses **Playfair Display**; everything functional uses **Inter**. Us
 - Staggered fade/slide-in for lists and sections (`Reveal`).
 - Haptics on add-to-cart, toggles and tab changes (`haptics` from `@/hooks`).
 - Touch targets of at least 44pt. Glassmorphism (`expo-blur`) for floating elements.
-- Money is GBP via `formatPrice`. Free delivery over £25, otherwise £3.99. First-order code `HUMI15` gives 15% off.
+- Money is GBP via `formatPrice`. Delivery fee, free-delivery threshold and promo codes come from the API's configuration (the owner is still confirming the values, see `docs/SETUP.md` section C); do not hard-code them in screens.
 
 ### Brand assets and the Logo
 
@@ -176,7 +221,7 @@ The app icon, splash icon, Android adaptive icon layers and favicon in `assets/`
 
 ### Add a product
 
-Products are static data in `src/data/`. Add an object to the `products` array, matching the `Product` type in `src/types`:
+With the API configured, the catalogue comes from the website's database and the bundled data in `src/data/` is the offline fallback and supplies extra details (weight, ingredients, tags) matched by slug. To change the bundled data, add an object to the `products` array, matching the `Product` type in `src/types`:
 
 1. Give it a unique `id` (used in the URL `/product/<id>`), a `name`, `price` in pounds, a `category` that exists in `categories`, an image URL, a description and any tags.
 2. Make sure the `category` id is a valid `CategoryId`; TypeScript will complain if it is not.

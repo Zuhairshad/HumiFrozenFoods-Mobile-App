@@ -1,7 +1,11 @@
 import { useMemo } from 'react';
+import * as Linking from 'expo-linking';
 import { PaymentSheetError, useStripe, type PaymentSheet } from '@stripe/stripe-react-native';
-import { stripeAvailable, STRIPE_URL_SCHEME } from '@/lib/stripe/StripeProvider';
+import { stripeAvailable } from '@/lib/stripe/StripeProvider';
 import type { PaymentSheetAdapter, PaymentSheetColors } from './paymentSheetTypes';
+
+/** Google Pay test environment follows the publishable key, not __DEV__. */
+const STRIPE_TEST_MODE = (process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '').startsWith('pk_test');
 
 function appearance(c: PaymentSheetColors): PaymentSheet.AppearanceParams {
   return {
@@ -32,13 +36,14 @@ export function usePaymentSheetAdapter(): PaymentSheetAdapter {
   return useMemo<PaymentSheetAdapter>(
     () => ({
       available: stripeAvailable,
+      unavailableMessage: "Card payments aren't set up in this build.",
       async run({ clientSecret, billing, colors, onPresenting }) {
         const init = await initPaymentSheet({
           merchantDisplayName: "Humi's Frozen Foods",
           paymentIntentClientSecret: clientSecret,
           applePay: { merchantCountryCode: 'GB' },
-          googlePay: { merchantCountryCode: 'GB', currencyCode: 'GBP', testEnv: __DEV__ },
-          returnURL: `${STRIPE_URL_SCHEME}://stripe-redirect`,
+          googlePay: { merchantCountryCode: 'GB', currencyCode: 'GBP', testEnv: STRIPE_TEST_MODE },
+          returnURL: Linking.createURL('stripe-redirect'),
           allowsDelayedPaymentMethods: false,
           style: colors.isDark ? 'alwaysDark' : 'alwaysLight',
           defaultBillingDetails: {

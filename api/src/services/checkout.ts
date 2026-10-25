@@ -1,8 +1,10 @@
-import { createHash, randomInt } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { FeatureDeps } from '../domain/ports.js';
 import type { NewOrder, PricedLine, Pricing } from '../domain/types.js';
 import { AppError, ConflictError, ValidationError } from '../lib/errors.js';
+import { generateOrderNumber } from '../orders/order-number.js';
+import { NO_PAYMENT_INTENT_ID } from '../payments/stripe-event.js';
 import { canonicalJson } from './canonical-json.js';
 import type { PaymentIntentBody } from './checkout-schema.js';
 import { slotProblem } from './checkout-slots.js';
@@ -54,27 +56,10 @@ type StoredResponse = z.infer<typeof storedResponseSchema>;
 
 // Stripe's minimum charge for GBP.
 const MIN_CHARGE_PENCE = 30;
-const ORDER_NUMBER_ATTEMPTS = 5;
-
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
-
-function randomDigits(count: number): string {
-  let digits = String(randomInt(1, 10));
-  while (digits.length < count) digits += String(randomInt(0, 10));
-  return digits;
-}
 
 export function createCheckoutService(deps: FeatureDeps) {
   const { orders, payments, pricing, idempotency, guestTokens, clock, logger, config } = deps;
-
-  async function generateOrderNumber(): Promise<string> {
-    // insertPending resolves any residual collision; this just makes one unlikely.
-    let candidate = randomDigits(config.business.orderNumberDigits);
-    for (let attempt = 1; attempt < ORDER_NUMBER_ATTEMPTS && (await orders.orderNumberExists(candidate)); attempt += 1) {
-      candidate = randomDigits(config.business.orderNumberDigits);
-    }
-    return candidate;
-  }
 
   /** Cancels an order we created but cannot hand to the client. Never throws: the expiry job is the backstop. */
   async function abandonOrder(orderId: string, paymentIntentId: string | null, reason: string): Promise<void> {
@@ -86,7 +71,7 @@ export function createCheckoutService(deps: FeatureDeps) {
       }
     }
     try {
-      await orders.applyPaymentTransition(orderId, { kind: 'cancelled', paymentIntentId: paymentIntentId ?? '' });
+      await orders.applyPaymentTransition(orderId, { kind: 'cancelled', paymentIntentId: paymentIntentId ?? NO_PAYMENT_INTENT_ID });
     } catch (error) {
       logger.error({ err: error, orderId, reason }, 'could not cancel abandoned order; expiry job will clean it up');
     }
@@ -154,7 +139,7 @@ export function createCheckoutService(deps: FeatureDeps) {
       }
 
       const newOrder: NewOrder = {
-        orderNumber: await generateOrderNumber(),
+        orderNumber: await generateOrderNumber(orders, config.business.orderNumberDigits),
         lines: quote.lines,
         pricing: quote.pricing,
         contact: body.contact,

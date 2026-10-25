@@ -38,11 +38,11 @@ export function webhookRoutes(deps: FeatureDeps): Hono<AppEnv> {
       throw error;
     }
 
-    const outcome = await process(event, c.get('logger'));
+    const outcome = await handleEvent(event, c.get('logger'));
     return c.json({ received: true, outcome });
   });
 
-  async function process(event: PaymentEvent, logger: Logger): Promise<Outcome> {
+  async function handleEvent(event: PaymentEvent, logger: Logger): Promise<Outcome> {
     if (event.type === 'ignored') return 'ignored';
     if (event.metadata.source !== PAYMENT_SOURCE) return 'ignored';
 
@@ -66,9 +66,15 @@ export function webhookRoutes(deps: FeatureDeps): Hono<AppEnv> {
       eventLog.warn({ orderId: order.orderId }, 'webhook_order_unknown');
       return 'ignored';
     }
-    if (transition.transition.kind === 'paid' && updated.sitePaymentStatus !== 'payment-success') {
-      // Money was taken but the order refused to become paid (e.g. cancelled by the expiry job first).
-      eventLog.error({ orderId: order.orderId, siteOrderStatus: updated.siteOrderStatus }, 'payment_not_applied');
+    if (
+      transition.transition.kind === 'paid' &&
+      (updated.sitePaymentStatus !== 'payment-success' || updated.siteOrderStatus === 'order-cancelled')
+    ) {
+      // Money was taken but the order is not live (e.g. the expiry job cancelled it first): needs a human.
+      eventLog.error(
+        { orderId: order.orderId, siteOrderStatus: updated.siteOrderStatus, sitePaymentStatus: updated.sitePaymentStatus },
+        'payment_not_applied',
+      );
     }
 
     const isNew = await deps.webhookEvents.recordIfNew(event.id, event.type);

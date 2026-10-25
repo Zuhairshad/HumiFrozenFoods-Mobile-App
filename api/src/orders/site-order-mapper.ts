@@ -303,7 +303,8 @@ function readDocument(doc: unknown, options: ReadOptions): StoredOrder | null {
 
   const addressDoc = isRec(doc.shipping_address) ? doc.shipping_address : isRec(doc.billing_address) ? doc.billing_address : {};
   const street = text(addressDoc.street_address);
-  const line2 = createdByApp && meta && typeof meta.address_line2 === 'string' ? meta.address_line2 : '';
+  const rawLine2 = meta?.address_line2;
+  const line2 = createdByApp && typeof rawLine2 === 'string' ? rawLine2 : '';
   const hasLine2 = line2 !== '' && street.endsWith(`, ${line2}`);
   const { slot, notes } = readSlot(meta, text(doc.note), placedAt);
 

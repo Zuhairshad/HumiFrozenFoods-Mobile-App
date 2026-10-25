@@ -6,6 +6,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { formatPrice } from '@/lib/format';
 import { useCartStore } from '@/store/cart';
 import type { Product } from '@/types';
+import { StockTag } from '@/features/shop/StockTag';
 import { MiniAddButton } from './MiniAddButton';
 import { useAddFeedback } from './useAddFeedback';
 import { useProductMenu } from './useProductMenu';
@@ -32,10 +33,11 @@ export const SquareTile = memo(function SquareTile({ product, reorderQty }: Prop
     [router, product.id],
   );
   const onAdd = useCallback(() => {
+    if (!product.inStock) return;
     add(product.id, qty);
     trigger();
     if (reorderQty) toast.show({ message: `Added ${qty}` });
-  }, [add, product.id, qty, reorderQty, toast, trigger]);
+  }, [add, product.id, product.inStock, qty, reorderQty, toast, trigger]);
 
   return (
     <PressableScale
@@ -51,8 +53,11 @@ export const SquareTile = memo(function SquareTile({ product, reorderQty }: Prop
         <View style={styles.plus}>
           <MiniAddButton
             added={added}
+            disabled={!product.inStock}
             onPress={onAdd}
-            accessibilityLabel={added ? `${product.name} added` : `Add ${product.name} to cart`}
+            accessibilityLabel={
+              !product.inStock ? `${product.name} is out of stock` : added ? `${product.name} added` : `Add ${product.name} to cart`
+            }
           />
         </View>
       </View>
@@ -62,6 +67,11 @@ export const SquareTile = memo(function SquareTile({ product, reorderQty }: Prop
       <AppText variant="footnote" color="labelSecondary" style={styles.price}>
         {formatPrice(product.price)}
       </AppText>
+      {product.inStock ? null : (
+        <View style={styles.stock}>
+          <StockTag product={product} />
+        </View>
+      )}
     </PressableScale>
   );
 });
@@ -72,4 +82,5 @@ const styles = StyleSheet.create({
   plus: { position: 'absolute', right: 8, bottom: 8 },
   name: { marginTop: 8 },
   price: { marginTop: 2, fontVariant: ['tabular-nums'] },
+  stock: { marginTop: 4 },
 });

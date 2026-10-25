@@ -1,16 +1,20 @@
 import { memo } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/ui';
-import { FREE_DELIVERY_THRESHOLD } from '@/lib/pricing';
+import { OfflineNote } from '@/features/shop/OfflineNote';
 
+/** Closing line of Home. No delivery or promo claims: the server owns those (shown in cart and checkout). */
 export const FootnoteLine = memo(function FootnoteLine() {
   return (
-    <AppText variant="footnote" color="labelTertiary" align="center" style={styles.line}>
-      {`Free delivery over £${FREE_DELIVERY_THRESHOLD} · Halal · UK made`}
-    </AppText>
+    <View style={styles.line}>
+      <OfflineNote />
+      <AppText variant="footnote" color="labelTertiary" align="center">
+        Halal · UK made
+      </AppText>
+    </View>
   );
 });
 
 const styles = StyleSheet.create({
-  line: { paddingTop: 40, paddingHorizontal: 20 },
+  line: { paddingTop: 40, paddingHorizontal: 20, alignItems: 'center', gap: 4 },
 });
