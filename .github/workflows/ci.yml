@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Actions are pinned to major tags, not commit SHAs (SHAs could not be verified when this file was written).
+# Dependabot (github-actions ecosystem) proposes updates weekly. Pin to SHAs once you can verify them.
+
+jobs:
+  app:
+    name: app (typecheck, lint, export)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx eslint .
+      - run: npm test --if-present
+      - name: Web export smoke test
+        run: npx expo export --platform web
+
+  api:
+    name: api (typecheck, lint, unit, integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Keep the mongod binary outside node_modules so `npm ci` (which wipes node_modules) does not delete the cache.
+      MONGOMS_DOWNLOAD_DIR: /home/runner/.cache/mongodb-binaries
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      # mongodb-memory-server downloads a mongod binary on first use; cache it between runs.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('api/package-lock.json') }}
+          restore-keys: mongodb-binaries-${{ runner.os }}-
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:integration
+
+  audit:
+    name: audit (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # continue-on-error keeps the workflow green but the step still shows a red mark in the run summary.
+      # Review docs/SETUP.md "Known dependency advisories" before treating a failure as noise.
+      - name: npm audit (app, production deps)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+      - name: npm audit (api, production deps)
+        continue-on-error: true
+        working-directory: api
+        run: npm audit --omit=dev --audit-level=high
+
+  secret-scan:
+    name: secret scan (heuristic)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      # Test fixtures under api/tests use fake credentials and are excluded.
+      # Heuristic only. It catches obvious mistakes, not all leaks. Enable GitHub secret scanning and push
+      # protection in the repository settings as the real control.
+      - name: Look for live Stripe keys, webhook secrets and credentialed Mongo URIs
+        run: |
+          set -u
+          status=0
+          scan() {
+            if git grep -nIE -e "$1" -- . ':!.github/workflows/ci.yml' ':!api/tests'; then
+              echo "::error::Possible secret matched pattern: $2"
+              status=1
+            fi
+          }
+          scan 'sk_live_[0-9A-Za-z]{10,}' 'Stripe live secret key'
+          scan 'rk_live_[0-9A-Za-z]{10,}' 'Stripe live restricted key'
+          scan 'whsec_[0-9A-Za-z]{16,}' 'Stripe webhook signing secret'
+          scan 'mongodb(\+srv)?://[^:@/[:space:]<$]+:[^@/[:space:]<$]+@' 'MongoDB URI with credentials'
+          if git ls-files | grep -E '(^|/)\.env($|\.[^/]*$)' | grep -vE '\.example$'; then
+            echo "::error::An env file is tracked by git"
+            status=1
+          fi
+          exit $status

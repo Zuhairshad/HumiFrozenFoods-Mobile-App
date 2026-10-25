@@ -39,3 +39,11 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# env files: only the *.example templates are committed
+.env
+.env.*
+!.env.example
+api/.env
+api/.env.*
+!api/.env.example

@@ -1,0 +1,31 @@
+version: 2
+updates:
+  # Expo SDK packages must stay on SDK-compatible versions. Review Expo/React Native bumps by running
+  # `npx expo install --check` on the PR branch; do not merge them blindly.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: expo
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react-native
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: react
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+  - package-ecosystem: npm
+    directory: /api
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

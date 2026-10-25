@@ -30,7 +30,7 @@ export const heroSlides: HeroSlide[] = [
     subtitle:
       'Juicy chapli kebabs marinated in a blend of spices and grilled to perfection. Ideal for gatherings and BBQs.',
     image: `${MEDIA}home-banner-img-4.4e2d01ef.png&w=1080&q=75`,
-    productId: 'meat-peshawari-chapli-kebab',
+    productId: 'meat-chapli-kebab',
     badges: ['Halal Certified', 'Ready in 12 Mins', 'Made in United Kingdom'],
   },
   {
