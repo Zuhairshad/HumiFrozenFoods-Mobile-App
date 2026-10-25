@@ -21,18 +21,21 @@ export function useProductMenu(product: Product): () => void {
         () => undefined,
       );
     };
+    const canAdd = product.inStock;
     if (Platform.OS === 'ios') {
+      const labels = [...(canAdd ? ['Add to Cart'] : []), favLabel, 'Share', 'Cancel'];
+      const actions: (() => void)[] = [
+        ...(canAdd ? [() => add(product.id, 1)] : []),
+        () => toggleFavorite(product.id),
+        share,
+      ];
       ActionSheetIOS.showActionSheetWithOptions(
-        { title: product.name, options: ['Add to Cart', favLabel, 'Share', 'Cancel'], cancelButtonIndex: 3 },
-        (i) => {
-          if (i === 0) add(product.id, 1);
-          else if (i === 1) toggleFavorite(product.id);
-          else if (i === 2) share();
-        },
+        { title: product.name, options: labels, cancelButtonIndex: labels.length - 1 },
+        (i) => actions[i]?.(),
       );
     } else {
       Alert.alert(product.name, undefined, [
-        { text: 'Add to Cart', onPress: () => add(product.id, 1) },
+        ...(canAdd ? [{ text: 'Add to Cart', onPress: () => add(product.id, 1) }] : []),
         { text: favLabel, onPress: () => toggleFavorite(product.id) },
         { text: 'Share', onPress: share },
       ]);

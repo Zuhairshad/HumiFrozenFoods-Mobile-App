@@ -1,4 +1,4 @@
-import { getBestSellers, getProduct, products } from '@/data';
+import { bestSellersOf, findProduct } from '@/data/selectors';
 import type { Order, Product } from '@/types';
 
 export interface BuyAgainItem {
@@ -8,13 +8,13 @@ export interface BuyAgainItem {
 }
 
 /** Unique products from past orders, most recent first. Falls back to nothing (callers show best sellers). */
-export function selectBuyAgain(orders: Order[], limit = 8): BuyAgainItem[] {
+export function selectBuyAgain(orders: Order[], products: readonly Product[], limit = 8): BuyAgainItem[] {
   const seen = new Set<string>();
   const out: BuyAgainItem[] = [];
   for (const order of orders) {
     for (const line of order.lines) {
       if (seen.has(line.productId)) continue;
-      const product = getProduct(line.productId);
+      const product = findProduct(products, line.productId);
       if (!product) continue;
       seen.add(line.productId);
       out.push({ product, quantity: line.quantity });
@@ -25,15 +25,15 @@ export function selectBuyAgain(orders: Order[], limit = 8): BuyAgainItem[] {
 }
 
 /** Products tagged "New", else the 6 newest by data order (end of the list is newest). */
-export function selectNewThisWeek(limit = 6): Product[] {
+export function selectNewThisWeek(products: readonly Product[], limit = 6): Product[] {
   const tagged = products.filter((p) => p.tags.includes('New'));
   if (tagged.length > 0) return tagged.slice(0, limit);
   return products.slice(-limit).reverse();
 }
 
 /** Top Picks: ranks 1-9, or the next 9 when the first shelf already shows the top best sellers. */
-export function selectTopPicks(skipTop: boolean): Product[] {
-  const ranked = getBestSellers(18);
+export function selectTopPicks(products: readonly Product[], skipTop: boolean): Product[] {
+  const ranked = bestSellersOf(products, 18);
   return skipTop ? ranked.slice(8, 17) : ranked.slice(0, 9);
 }
 

@@ -79,7 +79,7 @@ Honest limits of this setup:
 - "Atlas applies the highest permission from any assigned role": do not also give the user a broader built-in role or you silently remove the restriction.
 - Custom roles support only a subset of actions, and changes can take up to about 30 seconds on Free/Flex clusters.
 - **CHECK** the current official instructions before relying on this: <https://www.mongodb.com/docs/atlas/security-add-mongodb-roles/> (the steps above follow that page as fetched on 2026-10-25; the assignment of roles to users is on <https://www.mongodb.com/docs/atlas/security-add-mongodb-users/>).
-- Backups: confirm Atlas backups (cloud backup) are enabled for the cluster before the app writes anything (Atlas > cluster > Backup). Free tier clusters do not include continuous cloud backup; if you are on one, take manual exports first.
+- Backups: confirm Atlas backups (cloud backup) are enabled for the cluster before the app writes anything (Atlas > cluster > Backup). On free or shared tiers cloud backup may not be available (CHECK your tier); if so, take manual exports first.
 
 ---
 

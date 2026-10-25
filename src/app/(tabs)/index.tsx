@@ -1,12 +1,11 @@
 import { useCallback, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { RefreshControl, StyleSheet, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import {
   FootnoteLine,
   PagedRowShelf,
   PortraitTile,
-  PromoRow,
   QuickGlyphRow,
   Shelf,
   SquareTile,
@@ -15,7 +14,9 @@ import {
   TodayHeader,
 } from '@/features/home';
 import { selectBuyAgain, selectNewThisWeek, selectTopPicks, dayOfYear } from '@/features/home/selectors';
-import { getBestSellers, getProduct, heroSlides } from '@/data';
+import { bestSellersOf, findProduct } from '@/data/selectors';
+import { heroSlides } from '@/data';
+import { useCatalogSync, useProducts, usePullToRefresh } from '@/hooks/useProducts';
 import { useTabInset } from '@/hooks/useTabInset';
 import { useTheme } from '@/hooks/useTheme';
 import { useCartStore } from '@/store/cart';
@@ -27,6 +28,9 @@ export default function HomeScreen() {
   const tabInset = useTabInset();
   const add = useCartStore((s) => s.add);
   const orders = useOrdersStore((s) => s.orders);
+  const products = useProducts();
+  const { refreshing, onRefresh } = usePullToRefresh();
+  useCatalogSync();
   const scrollY = useSharedValue(0);
 
   const onScroll = useAnimatedScrollHandler((e) => {
@@ -37,15 +41,16 @@ export default function HomeScreen() {
 
   const hero = useMemo(() => {
     const slide = heroSlides.length > 0 ? heroSlides[dayOfYear(now) % heroSlides.length] : undefined;
-    const product = (slide ? getProduct(slide.productId) : undefined) ?? getBestSellers(1)[0];
-    return product ? { product, slide } : null;
-  }, [now]);
+    const product = (slide ? findProduct(products, slide.productId) : undefined) ?? bestSellersOf(products, 1)[0];
+    // The editorial slide only describes its own product; a fallback product gets its own headline.
+    return product ? { product, slide: slide && slide.productId === product.id ? slide : undefined } : null;
+  }, [now, products]);
 
-  const buyAgain = useMemo(() => selectBuyAgain(orders, 8), [orders]);
+  const buyAgain = useMemo(() => selectBuyAgain(orders, products, 8), [orders, products]);
   const showBuyAgain = buyAgain.length > 0;
-  const bestSellers = useMemo(() => getBestSellers(8), []);
-  const topPicks = useMemo(() => selectTopPicks(!showBuyAgain), [showBuyAgain]);
-  const newThisWeek = useMemo(() => selectNewThisWeek(6), []);
+  const bestSellers = useMemo(() => bestSellersOf(products, 8), [products]);
+  const topPicks = useMemo(() => selectTopPicks(products, !showBuyAgain), [products, showBuyAgain]);
+  const newThisWeek = useMemo(() => selectNewThisWeek(products, 6), [products]);
 
   const openAbout = useCallback(() => router.push('/about'), [router]);
   const openShop = useCallback(() => router.push('/shop'), [router]);
@@ -54,7 +59,7 @@ export default function HomeScreen() {
     if (hero) router.push({ pathname: '/product/[id]', params: { id: hero.product.id } });
   }, [hero, router]);
   const addHero = useCallback(() => {
-    if (hero) add(hero.product.id, 1);
+    if (hero && hero.product.inStock) add(hero.product.id, 1);
   }, [add, hero]);
 
   return (
@@ -67,6 +72,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         scrollIndicatorInsets={{ bottom: tabInset - 16 }}
         contentContainerStyle={{ paddingBottom: tabInset }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.tint} />}
       >
         <TodayHeader onLogoPress={openAbout} now={now} />
 
@@ -87,8 +93,6 @@ export default function HomeScreen() {
         <View style={styles.glyphs}>
           <QuickGlyphRow />
         </View>
-
-        <PromoRow />
 
         <View style={styles.shelf}>
           {showBuyAgain ? (

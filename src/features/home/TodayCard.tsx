@@ -49,7 +49,9 @@ export const TodayCard = memo(function TodayCard({
     return { transform: [{ translateY: dy }, { scale: 1.1 }] };
   });
 
+  const available = product.inStock;
   const handleAdd = () => {
+    if (!available) return;
     onAdd();
     trigger();
   };
@@ -87,7 +89,7 @@ export const TodayCard = memo(function TodayCard({
             </View>
             <View style={styles.barText}>
               <AppText variant="subheadStrong" color="onTint" numberOfLines={roomy ? 2 : 1}>
-                {`Ready in ${product.readyInMins} min`}
+                {!available ? 'Out of stock' : product.readyInMins > 0 ? `Ready in ${product.readyInMins} min` : product.weight || 'Cook from frozen'}
               </AppText>
               <AppText variant="footnote" color="onTint" style={styles.sub} numberOfLines={1}>
                 {`From ${formatPrice(product.price)}`}
@@ -97,8 +99,11 @@ export const TodayCard = memo(function TodayCard({
               size={40}
               tone="solid"
               added={added}
+              disabled={!available}
               onPress={handleAdd}
-              accessibilityLabel={added ? `${product.name} added` : `Add ${product.name} to cart`}
+              accessibilityLabel={
+                !available ? `${product.name} is out of stock` : added ? `${product.name} added` : `Add ${product.name} to cart`
+              }
             />
           </GlassSurface>
         </View>

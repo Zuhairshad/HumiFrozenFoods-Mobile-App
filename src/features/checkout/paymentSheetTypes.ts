@@ -29,6 +29,8 @@ export type SheetOutcome =
 export interface PaymentSheetAdapter {
   /** False on web / when no publishable key is configured. */
   available: boolean;
+  /** Why payments cannot run here (shown instead of Pay). */
+  unavailableMessage?: string;
   /** Initialise then present PaymentSheet. `onPresenting` fires between the two. */
   run(args: {
     clientSecret: string;
