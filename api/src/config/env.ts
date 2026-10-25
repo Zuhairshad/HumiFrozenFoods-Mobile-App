@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { type Keyring, parseKeyring } from '../auth/keyring.js';
-import type { BusinessConfig, PromoCode } from '../domain/types.js';
+import type { BusinessConfig } from '../domain/types.js';
 import { Secret } from '../lib/secret.js';
 
 export class ConfigError extends Error {
@@ -65,7 +65,7 @@ const promoCodes = z.preprocess(
       }
       seen.add(p.code);
     }
-    return parsed.data as PromoCode[];
+    return parsed.data;
   }),
 );
 

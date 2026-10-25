@@ -1,8 +1,12 @@
 import type { Product } from '@/types';
+import { poundsToPence } from '@/lib/format';
+
+/** Bundled authoring shape: prices in pounds; pence and stock are derived below. */
+type BundledProduct = Omit<Product, 'pricePence' | 'inStock' | 'lowStock' | 'gallery' | 'compareAtPricePence'>;
 
 const IMG = 'https://api.humisfrozenfoods.com/uploads/images/';
 
-export const products: Product[] = [
+const catalogue: BundledProduct[] = [
   {
     id: 'punjabi-samosa-roti',
     name: 'Punjabi Samosa Roti',
@@ -52,7 +56,7 @@ export const products: Product[] = [
       "Wheat flour, cabbage, carrot, spring onion, vegetable oil, soy sauce, black pepper, salt.",
   },
   {
-    id: 'meat-peshawari-chapli-kebab',
+    id: 'meat-chapli-kebab',
     name: 'Meat Peshawari Chapli Kebab',
     price: 12.5,
     category: 'kebabs',
@@ -148,7 +152,7 @@ export const products: Product[] = [
       "Halal chicken, onion, ginger, garlic, green chilli, coriander, garam masala, cumin, salt.",
   },
   {
-    id: 'chicken-peshawari-chapli-kebab',
+    id: 'chicken-chapli-kebab',
     name: 'Chicken Peshawari Chapli Kebab',
     price: 14.0,
     category: 'kebabs',
@@ -196,7 +200,7 @@ export const products: Product[] = [
       "Wheat flour, halal chicken, onion, ginger, garlic, green chilli, coriander, vegetable oil, spices, salt.",
   },
   {
-    id: 'tandoori-chicken-samosa-large',
+    id: 'tandoori-chicken-samosa',
     name: 'Tandoori Chicken Samosa Large',
     price: 9.2,
     category: 'samosas',
@@ -228,7 +232,7 @@ export const products: Product[] = [
       "Wheat flour, halal chicken, cabbage, carrot, spring onion, vegetable oil, soy sauce, black pepper, salt.",
   },
   {
-    id: 'vegetable-samosa-large',
+    id: 'vegatable-samosa',
     name: 'Vegetable Samosa Large',
     price: 7.7,
     category: 'vegetable-samosas',
@@ -260,7 +264,7 @@ export const products: Product[] = [
       "Potato, breadcrumbs, peas, onion, rapeseed oil, coriander, green chilli, cumin, salt.",
   },
   {
-    id: 'meat-shami-kebab',
+    id: 'meat-shami-kebabs',
     name: 'Meat Shami Kebab',
     price: 9.2,
     category: 'kebabs',
@@ -276,3 +280,13 @@ export const products: Product[] = [
       "Halal minced beef, chana dal, onion, ginger, garlic, green chilli, coriander, garam masala, salt.",
   },
 ];
+
+/**
+ * The bundled catalogue: instant first paint and offline fallback. Live data (store/catalog.ts)
+ * overrides it; never read this array from UI code, use the hooks in '@/hooks/useProducts'.
+ */
+export const bundledProducts: Product[] = catalogue.map((p) => ({
+  ...p,
+  pricePence: poundsToPence(p.price),
+  inStock: true,
+}));

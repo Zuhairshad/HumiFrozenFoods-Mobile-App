@@ -42,3 +42,20 @@ export function formatDate(iso: string): string {
   if (Number.isNaN(d.getTime())) return '';
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
+
+/** 598 -> 5.98. The ONLY place pence become pounds for display. Non-finite input becomes 0. */
+export function penceToPounds(pence: number): number {
+  return Number.isFinite(pence) ? pence / 100 : 0;
+}
+
+/** 9.5 -> 950 (round half away from zero at the pence, like the API). Non-finite input becomes 0. */
+export function poundsToPence(pounds: number): number {
+  if (!Number.isFinite(pounds)) return 0;
+  const p = Math.round(Math.abs(pounds) * 100 + Number.EPSILON);
+  return pounds < 0 ? -p : p;
+}
+
+/** 598 -> "£5.98". */
+export function formatPence(pence: number): string {
+  return formatPrice(penceToPounds(pence));
+}

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { migrateFavoritesState } from '@/data/id-migration';
 
 interface FavoritesState {
   ids: string[];
@@ -20,6 +21,9 @@ export const useFavoritesStore = create<FavoritesState>()(
       name: 'humi-favorites',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({ ids: s.ids }),
+      // v1: product ids were renamed to the live API slugs (src/data/id-migration.ts). Idempotent.
+      version: 1,
+      migrate: (persisted) => migrateFavoritesState(persisted) as { ids: string[] },
     },
   ),
 );

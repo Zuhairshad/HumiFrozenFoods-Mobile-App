@@ -1,7 +1,10 @@
-export type CategoryId = 'savory-snacks' | 'kebabs' | 'vegetable-samosas' | 'samosas';
+/** The four browsable categories. */
+export type BrowseCategoryId = 'savory-snacks' | 'kebabs' | 'vegetable-samosas' | 'samosas';
+/** `other` is a live-only bucket (API `collection: 'other'`); it appears under All, never as a category. */
+export type CategoryId = BrowseCategoryId | 'other';
 
 export interface Category {
-  id: CategoryId;
+  id: BrowseCategoryId;
   title: string;
   image: string; // remote URL
   blurb: string;
@@ -12,16 +15,21 @@ export type ProductTag = 'Best Seller' | 'Premium' | 'Halal Certified' | 'Vegan 
 export interface Product {
   id: string; // url-safe slug
   name: string;
-  price: number; // GBP, e.g. 9.5
+  price: number; // GBP for DISPLAY, e.g. 9.5 (always pricePence / 100). Do maths on pricePence.
+  pricePence: number; // integer pence, the unit of truth (matches the API)
+  compareAtPricePence?: number; // strike-through price when the API reports a discount
+  inStock: boolean;
+  lowStock?: boolean;
+  gallery?: string[]; // extra https photos (live only)
   category: CategoryId;
   image: string; // remote URL
   description: string;
   tags: ProductTag[];
-  readyInMins: number;
-  weight: string; // e.g. "20 pcs · 700g"
+  readyInMins: number; // 0 = unknown (live-only product without bundled enrichment)
+  weight: string; // e.g. "20 pcs · 700g"; '' when unknown
   rating: number; // 0-5
   reviewCount: number;
-  ingredients: string;
+  ingredients: string; // '' when unknown
 }
 
 export interface Testimonial {

@@ -13,9 +13,9 @@ Status tags: **FIXED** = decided here, implement exactly. **CONFIG** = value com
 
 ## 1. Error envelope (FIXED)
 ```json
-{ "error": { "code": "validation_failed", "message": "Human readable", "requestId": "…", "fields": { "email": "Enter a valid email" } } }
+{ "error": { "code": "validation_failed", "message": "Human readable", "requestId": "…", "details": [{ "path": "contact.email", "message": "Enter a valid email" }] } }
 ```
-`fields` only on `validation_failed`. Codes: `validation_failed` 400, `unauthorized` 401, `forbidden` 403, `not_found` 404, `conflict` 409, `idempotency_key_reuse` 409, `unprocessable` 422 (business rule, e.g. `out_of_stock`, `min_order`, `invalid_promo` — then `details` carries specifics), `payload_too_large` 413, `unsupported_media_type` 415, `rate_limited` 429 (+ `Retry-After`), `payment_provider_error` 502, `internal_error` 500. Never include stack traces or internals.
+`details` is optional. On `validation_failed` it is an array of `{ path, message }` (dotted path into the request body, e.g. `lines.0.quantity`); on business-rule errors (422) it is an object with specifics (e.g. `{ "productIds": ["…"] }`). Clients must treat `details` as optional and display only `message` when they cannot interpret it. Codes: `validation_failed` 400, `unauthorized` 401, `forbidden` 403, `not_found` 404, `conflict` 409, `idempotency_key_reuse` 409, `unprocessable` 422 (business rule, e.g. `out_of_stock`, `min_order`, `invalid_promo` — then `details` carries specifics), `payload_too_large` 413, `unsupported_media_type` 415, `rate_limited` 429 (+ `Retry-After`), `payment_provider_error` 502, `internal_error` 500. Never include stack traces or internals. (Implementation: `api/src/lib/errors.ts` `toEnvelope`.)
 
 ## 2. Shared shapes (FIXED)
 ```ts
