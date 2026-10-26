@@ -28,7 +28,10 @@ export function migrateCartState(persisted: unknown): unknown {
     const qty = typeof l.quantity === 'number' && Number.isFinite(l.quantity) ? l.quantity : 1;
     merged.set(id, Math.min(20, (merged.get(id) ?? 0) + qty));
   }
-  const lines: CartLine[] = [...merged].map(([productId, quantity]) => ({ productId, quantity }));
+  // Contract limits: whole quantities 1..20, at most 30 lines (the server rejects anything else).
+  const lines: CartLine[] = [...merged]
+    .map(([productId, quantity]) => ({ productId, quantity: Math.min(20, Math.max(1, Math.floor(quantity))) }))
+    .slice(0, 30);
   return { ...persisted, lines };
 }
 

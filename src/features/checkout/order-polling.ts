@@ -18,6 +18,8 @@ export interface PollDeps {
   onError?: (e: unknown) => void;
   intervalMs?: number;
   maxAttempts?: number;
+  /** Default: the payment is no longer 'pending'. Recovery also stops on a cancelled order. */
+  isSettled?: (order: Order) => boolean;
 }
 
 /**
@@ -30,6 +32,7 @@ export async function pollOrderPayment(deps: PollDeps): Promise<PollOutcome> {
   const sleep = deps.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
   const ctl = new AbortController();
   deps.signal?.addEventListener('abort', () => ctl.abort(), { once: true });
+  const settled = deps.isSettled ?? ((o: Order) => o.paymentStatus !== 'pending');
   let last: Order | null = null;
   for (let attempt = 0; attempt < max; attempt++) {
     if (ctl.signal.aborted) return { kind: 'cancelled' };
@@ -38,7 +41,7 @@ export async function pollOrderPayment(deps: PollDeps): Promise<PollOutcome> {
       if (ctl.signal.aborted) return { kind: 'cancelled' };
       last = order;
       deps.onUpdate?.(order);
-      if (order.paymentStatus !== 'pending') return { kind: 'settled', order };
+      if (settled(order)) return { kind: 'settled', order };
     } catch (e) {
       if (ctl.signal.aborted || (isAppApiError(e) && e.isAborted)) return { kind: 'cancelled' };
       if (isAppApiError(e) && (e.status === 401 || e.status === 403)) return { kind: 'unauthorized' };

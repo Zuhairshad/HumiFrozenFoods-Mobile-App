@@ -160,6 +160,10 @@ export function loadConfig(source: Readonly<Record<string, string | undefined>> 
   }
   const env = parsed.data;
 
+  // NODE_ENV defaults to development, which relaxes secrets and error detail. A Vercel production deployment
+  // must never run in that mode because the variable was missing or wrong, so the platform's own marker wins.
+  if (source['VERCEL_ENV'] === 'production') env.NODE_ENV = 'production';
+
   if (env.NODE_ENV === 'production') {
     const missing = PRODUCTION_REQUIRED.filter((name) => env[name] === undefined);
     if (missing.length > 0) {

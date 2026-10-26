@@ -13,6 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '@/components/ui/Toast';
+import { useReconcilePendingOrders, useStripeUrlForwarding } from '@/features/checkout';
 import { BrandSplash, useAppReady } from '@/features/shell';
 import { AppStripeProvider } from '@/lib/stripe/StripeProvider';
 import { useCatalogSync } from '@/hooks/useProducts';
@@ -46,6 +47,9 @@ function AppShell() {
   // Start live data at launch (not per screen) so deep links to any route have data.
   useCatalogSync();
   useConfigSync();
+  // Stripe returnURL forwarding (3DS / redirects) and recovery of orders saved before a payment sheet opened.
+  useStripeUrlForwarding();
+  useReconcilePendingOrders();
   const [splashDone, setSplashDone] = useState(false);
   const reveal = useSharedValue(0);
 
@@ -107,6 +111,7 @@ function AppShell() {
             name="order/[id]"
             options={{ gestureEnabled: false, animation: 'fade' }}
           />
+          <Stack.Screen name="stripe-redirect" options={{ animation: 'none', gestureEnabled: false }} />
           <Stack.Screen name="orders/index" />
           <Stack.Screen name="orders/[id]" />
           <Stack.Screen

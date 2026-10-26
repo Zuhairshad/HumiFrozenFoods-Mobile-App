@@ -66,13 +66,29 @@ export interface IdempotencyRecord {
   response: unknown;
   status: number;
   createdAt: Date;
+  /** Absent means completed (records written by `save`). */
+  state?: 'in_progress' | 'completed';
 }
+
+export type IdempotencyClaim = { outcome: 'claimed' } | { outcome: 'exists'; record: IdempotencyRecord };
 
 export interface IdempotencyStore {
   find(keyHash: string): Promise<IdempotencyRecord | null>;
   /** Returns false if a record for this key already exists (race). */
   save(record: IdempotencyRecord): Promise<boolean>;
+  /**
+   * Atomically claims the key (state `in_progress`) through the unique index before any side effect happens.
+   * An `in_progress` claim older than `staleAfterMs` relative to `createdAt` is taken over by the new caller.
+   */
+  claim(keyHash: string, requestHash: string, createdAt: Date, staleAfterMs?: number): Promise<IdempotencyClaim>;
+  /** Stores the response on a claim. Returns false if the claim no longer belongs to the caller (released or reclaimed). */
+  complete(keyHash: string, response: unknown, status: number): Promise<boolean>;
+  /** Drops an unfinished claim so a retry can proceed. Never touches completed records. */
+  release(keyHash: string): Promise<void>;
 }
+
+/** Default age after which an unfinished claim is considered abandoned. */
+export const IDEMPOTENCY_STALE_CLAIM_MS = 60_000;
 
 export interface EnquiryRepository {
   insert(enquiry: EnquiryInput & { ipHash: string }): Promise<{ id: string }>;

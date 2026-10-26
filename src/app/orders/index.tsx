@@ -3,17 +3,19 @@ import { RefreshControl, StyleSheet, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Stack, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
-import { EmptyState, ListSection, RoundButton, ScreenScroll, useToast } from '@/components/ui';
+import { EmptyState, ListRow, ListSection, RoundButton, ScreenScroll, useToast } from '@/components/ui';
 import { OrderRow, deriveStatus, isActive, syncAllOrders } from '@/features/account';
 import { haptics } from '@/hooks/useHaptics';
 import { useCartStore } from '@/store/cart';
-import { useOrdersStore } from '@/store/orders';
+import { isPendingFresh, useOrdersStore } from '@/store/orders';
+import { formatPrice } from '@/lib/format';
 import type { Order } from '@/types';
 
 export default function OrdersScreen() {
   const router = useRouter();
   const toast = useToast();
   const orders = useOrdersStore((s) => s.orders);
+  const pendingAll = useOrdersStore((s) => s.pending);
   const addToCart = useCartStore((s) => s.add);
   const [now, setNow] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
@@ -24,6 +26,9 @@ export default function OrdersScreen() {
     for (const o of orders) (isActive(deriveStatus(o, now)) ? a : p).push(o);
     return { active: a, past: p };
   }, [orders, now]);
+
+  // Never-paid orders are not "orders". Only ones < 24 h old show, clearly labelled.
+  const awaiting = useMemo(() => pendingAll.filter((o) => isPendingFresh(o, now)), [pendingAll, now]);
 
   const refresh = useCallback(() => {
     setRefreshing(true);
@@ -92,7 +97,7 @@ export default function OrdersScreen() {
         grouped
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
       >
-        {orders.length === 0 ? (
+        {orders.length === 0 && awaiting.length === 0 ? (
           <View style={styles.empty}>
             <EmptyState
               icon="shippingbox"
@@ -104,6 +109,19 @@ export default function OrdersScreen() {
           </View>
         ) : (
           <View style={styles.stack}>
+            {awaiting.length > 0 ? (
+              <ListSection header="Awaiting payment">
+                {awaiting.map((o) => (
+                  <ListRow
+                    key={o.id}
+                    title={`Order ${o.id}`}
+                    subtitle="Awaiting payment confirmation. Not charged until confirmed."
+                    value={formatPrice(o.total)}
+                    onPress={() => open(o)}
+                  />
+                ))}
+              </ListSection>
+            ) : null}
             {active.length > 0 ? <ListSection header="Active">{renderRows(active)}</ListSection> : null}
             {past.length > 0 ? <ListSection header="Past">{renderRows(past)}</ListSection> : null}
           </View>

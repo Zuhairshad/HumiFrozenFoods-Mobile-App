@@ -34,7 +34,7 @@ jobs:
         run: npx expo export --platform web
 
   api:
-    name: api (typecheck, lint, unit, integration)
+    name: api (typecheck, lint, unit, integration, security)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -61,6 +61,7 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run test:integration
+      - run: npm run test:security
 
   audit:
     name: audit (non-blocking)

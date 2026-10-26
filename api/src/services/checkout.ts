@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { FeatureDeps } from '../domain/ports.js';
+import { type FeatureDeps, IDEMPOTENCY_STALE_CLAIM_MS, type IdempotencyRecord, type QuoteResult } from '../domain/ports.js';
 import type { NewOrder, PricedLine, Pricing } from '../domain/types.js';
 import { AppError, ConflictError, ValidationError } from '../lib/errors.js';
 import { generateOrderNumber } from '../orders/order-number.js';
@@ -56,9 +56,19 @@ type StoredResponse = z.infer<typeof storedResponseSchema>;
 
 // Stripe's minimum charge for GBP.
 const MIN_CHARGE_PENCE = 30;
+const MAX_CLAIM_ATTEMPTS = 3;
+
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
 
-export function createCheckoutService(deps: FeatureDeps) {
+export interface CheckoutOptions {
+  /** How long a losing concurrent request polls for the winner. */
+  pollIntervalMs?: number;
+  maxWaitMs?: number;
+}
+
+export function createCheckoutService(deps: FeatureDeps, options: CheckoutOptions = {}) {
+  const pollIntervalMs = options.pollIntervalMs ?? 50;
+  const maxWaitMs = options.maxWaitMs ?? 8_000;
   const { orders, payments, pricing, idempotency, guestTokens, clock, logger, config } = deps;
 
   /** Cancels an order we created but cannot hand to the client. Never throws: the expiry job is the backstop. */
@@ -92,7 +102,19 @@ export function createCheckoutService(deps: FeatureDeps) {
     return { status: 200, replay: true, body: { ...stored, guestToken: token } };
   }
 
-  return {
+  /** Polls until the winning request completes (its record), is released ('released') or the bound passes ('timeout'). */
+  async function waitForWinner(keyHash: string): Promise<IdempotencyRecord | 'released' | 'timeout'> {
+    const deadline = Date.now() + maxWaitMs;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      const record = await idempotency.find(keyHash);
+      if (!record) return 'released';
+      if (record.state !== 'in_progress') return record;
+    }
+    return 'timeout';
+  }
+
+  const service = {
     /**
      * Idempotent order + PaymentIntent creation. `idempotencyKey` must already be a validated UUID v4.
      * Failure after the order insert always cancels that order so no orphan pending order is left behind.
@@ -102,7 +124,7 @@ export function createCheckoutService(deps: FeatureDeps) {
       const requestHash = sha256(canonicalJson(body));
 
       const existing = await idempotency.find(keyHash);
-      if (existing) {
+      if (existing?.state !== 'in_progress' && existing) {
         if (existing.requestHash !== requestHash) throw reuseError();
         return replayStored(existing);
       }
@@ -138,6 +160,36 @@ export function createCheckoutService(deps: FeatureDeps) {
         });
       }
 
+      // Claim the key BEFORE any side effect: concurrent requests with one key must not each insert an order.
+      for (let attempt = 0; attempt < MAX_CLAIM_ATTEMPTS; attempt += 1) {
+        const claim = await idempotency.claim(keyHash, requestHash, clock.now(), IDEMPOTENCY_STALE_CLAIM_MS);
+        if (claim.outcome === 'claimed') break;
+        if (claim.record.requestHash !== requestHash) throw reuseError();
+        if (claim.record.state !== 'in_progress') return replayStored(claim.record);
+        const settled = await waitForWinner(keyHash);
+        if (settled === 'timeout') {
+          throw new AppError(409, 'conflict', 'This checkout is still being processed. Retry shortly.', {
+            headers: { 'Retry-After': '2' },
+          });
+        }
+        if (settled !== 'released') return replayStored(settled);
+        if (attempt === MAX_CLAIM_ATTEMPTS - 1) throw new ConflictError('Please retry the request', 'conflict');
+      }
+
+      try {
+        return await provision(body, keyHash, quote);
+      } catch (error) {
+        try {
+          await idempotency.release(keyHash);
+        } catch (releaseError) {
+          logger.error({ err: releaseError }, 'could not release idempotency claim; it expires on its own');
+        }
+        throw error;
+      }
+    },
+  };
+
+  async function provision(body: PaymentIntentBody, keyHash: string, quote: QuoteResult): Promise<CheckoutResult> {
       const newOrder: NewOrder = {
         orderNumber: await generateOrderNumber(orders, config.business.orderNumberDigits),
         lines: quote.lines,
@@ -189,27 +241,17 @@ export function createCheckoutService(deps: FeatureDeps) {
         })),
       };
 
-      let saved: boolean;
+      let completed: boolean;
       try {
-        saved = await idempotency.save({
-          keyHash,
-          requestHash,
-          response,
-          status: 201,
-          createdAt: clock.now(),
-        });
+        completed = await idempotency.complete(keyHash, response, 201);
       } catch (error) {
-        await abandonOrder(order.orderId, intent.id, 'idempotency_save_failed');
+        await abandonOrder(order.orderId, intent.id, 'idempotency_complete_failed');
         throw error;
       }
-
-      if (!saved) {
-        // A concurrent request with the same key won; ours is a duplicate and must not stay payable.
-        await abandonOrder(order.orderId, intent.id, 'idempotency_race');
-        const winner = await idempotency.find(keyHash);
-        if (!winner) throw new ConflictError('Please retry the request', 'conflict');
-        if (winner.requestHash !== requestHash) throw reuseError();
-        return replayStored(winner);
+      if (!completed) {
+        // The claim was taken over (it looked abandoned); the new owner will create its own order.
+        await abandonOrder(order.orderId, intent.id, 'idempotency_claim_lost');
+        throw new ConflictError('Please retry the request', 'conflict');
       }
 
       const { token } = guestTokens.issue(order.orderId);
@@ -218,8 +260,9 @@ export function createCheckoutService(deps: FeatureDeps) {
         'checkout payment intent created',
       );
       return { status: 201, replay: false, body: { ...response, guestToken: token } };
-    },
-  };
+  }
+
+  return service;
 }
 
 function reuseError(): ConflictError {

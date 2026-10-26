@@ -6,3 +6,5 @@ export * from './slots';
 export * from './useStripeCheckout';
 export * from './validation';
 export * from './draft';
+export * from './useStripeUrlForwarding';
+export * from './useReconcilePendingOrders';

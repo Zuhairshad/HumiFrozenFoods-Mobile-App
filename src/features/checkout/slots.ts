@@ -36,6 +36,32 @@ const pad = (n: number) => String(n).padStart(2, '0');
 
 export const toDateKey = (d: Date): string => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+/** The server's cutoff and "today" are UK time, whatever zone the phone is set to. */
+const SLOT_TIME_ZONE = 'Europe/London';
+
+/** Calendar date and hour (0-23) at `now` in Europe/London. Falls back to the device zone if Intl lacks time zones. */
+export function londonNow(now: Date): { year: number; month: number; day: number; hour: number } {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: SLOT_TIME_ZONE,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      hourCycle: 'h23',
+    }).formatToParts(now);
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    const year = get('year');
+    const month = get('month');
+    const day = get('day');
+    const hour = get('hour') % 24;
+    if ([year, month, day, hour].every(Number.isFinite)) return { year, month, day, hour };
+  } catch {
+    /* fall through */
+  }
+  return { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate(), hour: now.getHours() };
+}
+
 export interface DeliveryDay {
   key: string;
   /** "Today" or "Sat 25" */
@@ -46,17 +72,26 @@ export interface DeliveryDay {
 
 export function getDeliveryDays(now: Date = new Date()): DeliveryDay[] {
   const out: DeliveryDay[] = [];
-  const startOffset = now.getHours() < SAME_DAY_CUTOFF_HOUR ? 0 : 1;
+  const t = londonNow(now);
+  const startOffset = t.hour < SAME_DAY_CUTOFF_HOUR ? 0 : 1;
   for (let i = 0; i < DAY_COUNT; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + startOffset + i);
+    // Pure calendar arithmetic on the London date: immune to DST and to the device zone.
+    const utc = new Date(Date.UTC(t.year, t.month - 1, t.day + startOffset + i));
     const isToday = startOffset + i === 0;
-    out.push({ key: toDateKey(d), label: isToday ? 'Today' : `${WEEKDAYS[d.getDay()]} ${d.getDate()}`, isToday, date: d });
+    out.push({
+      key: `${utc.getUTCFullYear()}-${pad(utc.getUTCMonth() + 1)}-${pad(utc.getUTCDate())}`,
+      label: isToday ? 'Today' : `${WEEKDAYS[utc.getUTCDay()]} ${utc.getUTCDate()}`,
+      isToday,
+      date: new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate()),
+    });
   }
   return out;
 }
 
 export function isWindowAvailable(day: DeliveryDay, w: DeliveryWindow, now: Date = new Date()): boolean {
-  return !day.isToday || w.startHour >= now.getHours() + LEAD_HOURS;
+  if (!day.isToday) return true;
+  const hour = londonNow(now).hour;
+  return hour < SAME_DAY_CUTOFF_HOUR && w.startHour >= hour + LEAD_HOURS;
 }
 
 /** "Sat 25 Oct, 8am-12pm" */

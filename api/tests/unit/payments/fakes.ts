@@ -1,7 +1,10 @@
 import type { Hono } from 'hono';
 import { createApp } from '../../../src/app.js';
+import { IDEMPOTENCY_STALE_CLAIM_MS } from '../../../src/domain/ports.js';
+import type { CheckoutOptions } from '../../../src/services/checkout.js';
 import type {
   FeatureDeps,
+  IdempotencyClaim,
   IdempotencyRecord,
   IdempotencyStore,
   OrdersRepository,
@@ -152,24 +155,40 @@ export class FakeOrders implements OrdersRepository {
 
 export class FakeIdempotency implements IdempotencyStore {
   readonly records = new Map<string, IdempotencyRecord>();
-  /** When set, the next save loses a "race" to this record. */
-  raceWinner: IdempotencyRecord | undefined;
-  failSave: Error | undefined;
+  failComplete: Error | undefined;
+  /** Counts successful claims, so tests can assert exactly one winner. */
+  claims = 0;
 
   find(keyHash: string): Promise<IdempotencyRecord | null> {
     return Promise.resolve(this.records.get(keyHash) ?? null);
   }
 
   save(record: IdempotencyRecord): Promise<boolean> {
-    if (this.failSave) return Promise.reject(this.failSave);
-    if (this.raceWinner) {
-      this.records.set(record.keyHash, this.raceWinner);
-      this.raceWinner = undefined;
-      return Promise.resolve(false);
-    }
     if (this.records.has(record.keyHash)) return Promise.resolve(false);
     this.records.set(record.keyHash, record);
     return Promise.resolve(true);
+  }
+
+  claim(keyHash: string, requestHash: string, createdAt: Date, staleAfterMs = IDEMPOTENCY_STALE_CLAIM_MS): Promise<IdempotencyClaim> {
+    const existing = this.records.get(keyHash);
+    const stale = existing?.state === 'in_progress' && createdAt.getTime() - existing.createdAt.getTime() > staleAfterMs;
+    if (existing && !stale) return Promise.resolve({ outcome: 'exists', record: existing });
+    this.claims += 1;
+    this.records.set(keyHash, { keyHash, requestHash, response: null, status: 0, createdAt, state: 'in_progress' });
+    return Promise.resolve({ outcome: 'claimed' });
+  }
+
+  complete(keyHash: string, response: unknown, status: number): Promise<boolean> {
+    if (this.failComplete) return Promise.reject(this.failComplete);
+    const existing = this.records.get(keyHash);
+    if (existing?.state !== 'in_progress') return Promise.resolve(false);
+    this.records.set(keyHash, { keyHash, requestHash: existing.requestHash, response, status, createdAt: existing.createdAt, state: 'completed' });
+    return Promise.resolve(true);
+  }
+
+  release(keyHash: string): Promise<void> {
+    if (this.records.get(keyHash)?.state === 'in_progress') this.records.delete(keyHash);
+    return Promise.resolve();
   }
 }
 
@@ -266,7 +285,7 @@ export interface Harness {
 }
 
 export function buildHarness(
-  options: { env?: Record<string, string>; now?: Date; gateway?: FeatureDeps['payments'] } = {},
+  options: { env?: Record<string, string>; now?: Date; gateway?: FeatureDeps['payments']; checkout?: CheckoutOptions } = {},
 ): Harness {
   const logs = captureLogs();
   const logger = createLogger({ level: 'debug', destination: logs.stream });
@@ -296,7 +315,7 @@ export function buildHarness(
     rateLimitStore: base.rateLimitStore,
   };
   const app = createApp(base, (a) => {
-    a.route('/v1', paymentIntentRoutes(deps));
+    a.route('/v1', paymentIntentRoutes(deps, { pollIntervalMs: 5, maxWaitMs: 300, ...options.checkout }));
     a.route('/v1', webhookRoutes(deps));
   });
   return { app, deps, orders, idempotency, webhookEvents, pricing, gateway, logs };

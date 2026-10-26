@@ -98,7 +98,7 @@ Zero-downtime rotation:
 2. Set `GUEST_TOKEN_KEYS=k2:<new>,k1:<old>` (new first). Redeploy. New tokens use k2; existing tokens still verify with k1.
 3. After `GUEST_TOKEN_TTL_SECONDS` has passed (default 14 days), remove `k1`. Redeploy.
 
-Emergency (key compromised): set only the new key. All outstanding guest tokens stop working immediately. Customers can recover access via order lookup (order number plus email or phone) *(planned route)*. Tell support to expect questions.
+Emergency (key compromised): set only the new key. All outstanding guest tokens stop working immediately. Customers can recover access via order lookup (order number plus email or phone, `POST /v1/orders/lookup`). Tell support to expect questions.
 
 ### 5.2 Stripe secret key
 

@@ -57,6 +57,37 @@ describe('createMongoWebhookEventStore', () => {
   });
 });
 
+describe('idempotency claims against real MongoDB', () => {
+  const key = (n: string) => n.repeat(64).slice(0, 64);
+  const t0 = new Date('2026-10-26T10:00:00Z');
+
+  it('lets exactly one of many concurrent claims win; completing exposes the response; release frees the key', async () => {
+    const store = createMongoIdempotencyStore(database.db());
+    const results = await Promise.all(Array.from({ length: 25 }, () => store.claim(key('c'), 'r1', t0)));
+    expect(results.filter((r) => r.outcome === 'claimed')).toHaveLength(1);
+    const loser = results.find((r) => r.outcome === 'exists');
+    expect(loser).toMatchObject({ record: { state: 'in_progress', requestHash: 'r1' } });
+    expect(await store.complete(key('c'), { orderId: 'x' }, 201)).toBe(true);
+    expect(await store.find(key('c'))).toMatchObject({ response: { orderId: 'x' }, status: 201 });
+    expect((await store.find(key('c')))?.state).toBeUndefined();
+    await store.release(key('c')); // completed records are never released
+    expect(await store.find(key('c'))).not.toBeNull();
+
+    expect(await store.claim(key('d'), 'r1', t0)).toEqual({ outcome: 'claimed' });
+    await store.release(key('d'));
+    expect(await store.claim(key('d'), 'r2', t0)).toEqual({ outcome: 'claimed' });
+  });
+
+  it('reclaims a stale claim but not a fresh one, and the old owner then cannot complete', async () => {
+    const store = createMongoIdempotencyStore(database.db());
+    await store.claim(key('e'), 'r1', t0);
+    expect((await store.claim(key('e'), 'r2', new Date(t0.getTime() + 30_000))).outcome).toBe('exists');
+    const takeover = await Promise.all(Array.from({ length: 10 }, () => store.claim(key('e'), 'r2', new Date(t0.getTime() + 61_000))));
+    expect(takeover.filter((r) => r.outcome === 'claimed')).toHaveLength(1);
+    expect(await store.find(key('e'))).toMatchObject({ requestHash: 'r2' });
+  });
+});
+
 describe('checkout -> webhook -> expiry against real MongoDB', () => {
   const clock = { now: () => NOW };
   const gateway = createFakeGateway({ now: () => NOW.getTime() });

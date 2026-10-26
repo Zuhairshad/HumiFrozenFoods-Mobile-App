@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { EnquiryInput } from '../domain/types.js';
+import { hasForbiddenText } from '../lib/text-policy.js';
 
 /*
  * Text policy (applied to every string field):
@@ -7,26 +8,26 @@ import type { EnquiryInput } from '../domain/types.js';
  *   2. Control (Cc), format (Cf: zero-width, bidi overrides/isolates, BOM), line/paragraph
  *      separators (Zl/Zp), surrogates and private-use characters are REJECTED, not stripped.
  *      Silently stripping would let `a<ZWSP>b` and `ab` differ in storage versus display and
- *      would hide header-injection attempts; a 400 is clearer. Consequence: ZWJ emoji sequences are refused.
+ *      would hide header-injection attempts; a 400 is clearer. Emoji are the exception (lib/text-policy.ts):
+ *      ZWJ, variation selectors, skin tones and tag characters are accepted only inside valid emoji
+ *      sequences, and in `message` only; names allow single emoji but never ZWJ chains.
  *   3. Single-line fields reject newlines too; runs of Unicode spaces collapse to one ASCII space; then trim.
  *   4. The message is the only multi-line field: CRLF/CR become LF and tabs become spaces
  *      before checking, runs of 3+ newlines collapse to a blank line.
  * HTML is never interpreted or stripped: `<script>` is kept as inert plain text, and output
  * encoding is the responsibility of whatever renders it.
  */
-const FORBIDDEN = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Zl}\p{Zp}]/u;
-const FORBIDDEN_EXCEPT_NEWLINE = /[^\P{Cc}\n]|[\p{Cf}\p{Cs}\p{Co}\p{Zl}\p{Zp}]/u;
 const UNICODE_SPACE_RUN = /\p{Zs}+/gu;
 
 export function normaliseLine(value: string): string | null {
   const nfc = value.normalize('NFC');
-  if (FORBIDDEN.test(nfc)) return null;
+  if (hasForbiddenText(nfc)) return null;
   return nfc.replace(UNICODE_SPACE_RUN, ' ').trim();
 }
 
 export function normaliseMessage(value: string): string | null {
   const nfc = value.normalize('NFC').replace(/\r\n?/g, '\n').replace(/\t/g, ' ');
-  if (FORBIDDEN_EXCEPT_NEWLINE.test(nfc)) return null;
+  if (hasForbiddenText(nfc, { zwjEmoji: true, newlines: true })) return null;
   return nfc
     .replace(UNICODE_SPACE_RUN, ' ')
     .replace(/ ?\n ?/g, '\n')

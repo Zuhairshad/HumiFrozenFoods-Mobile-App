@@ -59,7 +59,7 @@ export default function OrderLookupScreen() {
             autoCapitalize="characters"
             autoCorrect={false}
             returnKeyType="next"
-            placeholder="HUMI-48213"
+            placeholder="Order number"
           />
           <FieldRow
             label="Email or phone"

@@ -4,12 +4,12 @@ import { ValidationError } from '../lib/errors.js';
 import { jsonBody } from '../lib/validation.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { IDEMPOTENCY_KEY_PATTERN, paymentIntentBodySchema } from '../services/checkout-schema.js';
-import { createCheckoutService } from '../services/checkout.js';
+import { type CheckoutOptions, createCheckoutService } from '../services/checkout.js';
 import type { AppEnv } from '../types.js';
 
-export function paymentIntentRoutes(deps: FeatureDeps): Hono<AppEnv> {
+export function paymentIntentRoutes(deps: FeatureDeps, options?: CheckoutOptions): Hono<AppEnv> {
   const routes = new Hono<AppEnv>();
-  const checkout = createCheckoutService(deps);
+  const checkout = createCheckoutService(deps, options);
 
   routes.post(
     '/checkout/payment-intent',

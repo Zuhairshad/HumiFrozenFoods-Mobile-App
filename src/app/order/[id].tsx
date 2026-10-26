@@ -19,7 +19,7 @@ export default function OrderConfirmationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
-  const order = useOrdersStore((s) => (id ? s.orders.find((o) => o.id.toUpperCase() === id.toUpperCase()) : undefined));
+  const order = useOrdersStore((s) => (id ? s.getOrder(String(id)) : undefined));
   const patchOrder = useOrdersStore((s) => s.patchOrder);
   const token = useOrdersStore((s) => s.getToken(order?.remoteId));
   const [phase, setPhase] = useState<Phase>('polling');
@@ -50,7 +50,8 @@ export default function OrderConfirmationScreen() {
       onError: () => setOffline(true),
     }).then((outcome) => {
       if (outcome.kind === 'cancelled') return;
-      setPhase(outcome.kind === 'timeout' ? 'delayed' : 'polling');
+      // R11: an unauthorized poll also needs the Refresh button, not an endless "confirming".
+      setPhase(outcome.kind === 'timeout' || outcome.kind === 'unauthorized' ? 'delayed' : 'polling');
     });
   }, [live, orderId, remoteId, token, patchOrder]);
 

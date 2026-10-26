@@ -71,6 +71,7 @@ export function usePaymentSheetAdapter(): PaymentSheetAdapter {
             message: res.error.localizedMessage ?? res.error.message,
             code: res.error.code,
             declineCode: res.error.declineCode,
+            errorType: res.error.type,
           };
         }
         return res.didCancel ? { kind: 'cancelled' } : { kind: 'success' };

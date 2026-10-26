@@ -1,14 +1,20 @@
 import { AppApiError, isAppApiError, lastSegment, retryAfterText } from '../../lib/api/errors';
 import { makeIdempotencyKey, toPaymentIntentBody, type PaymentIntentResult, type StripeGateway } from '../../lib/api/stripe-gateway';
-import type { OrderDraft, Pricing } from '../../lib/api/types';
-import type { PaymentSheetAdapter, PaymentSheetBilling, PaymentSheetColors } from './paymentSheetTypes';
+import type { Order, OrderDraft, Pricing } from '../../lib/api/types';
+import { pollOrderPayment, POLL_INTERVAL_MS, POLL_MAX_ATTEMPTS } from './order-polling';
+import type { PaymentSheetAdapter, PaymentSheetBilling, PaymentSheetColors, SheetOutcome } from './paymentSheetTypes';
+
+/** Cached intents older than this are replaced (server pending TTL is 120 min; stay well inside it). */
+export const MAX_INTENT_AGE_MS = 55 * 60 * 1000;
 
 export type CheckoutStatus =
   | 'idle'
   | 'creating' // server prices, creates order + PaymentIntent
   | 'presenting' // PaymentSheet on screen
   | 'confirming' // sheet reported success; recording the order locally
-  | 'succeeded' // sheet success. NOT proof of payment: the order screen polls the server
+  | 'verifying' // the sheet ended in an unclear way: asking the server (GET /v1/orders/:id) before saying anything
+  | 'succeeded' // sheet success, or the server says paid. Sheet success alone is NOT proof: the order screen polls
+  | 'unconfirmed' // unclear sheet outcome and the server still says pending after ~30 s: neither paid nor failed
   | 'failed'
   | 'cancelled';
 
@@ -63,8 +69,21 @@ export interface CheckoutDeps {
   gateway: StripeGateway;
   sheet: Pick<PaymentSheetAdapter, 'available' | 'run'> & { unavailableMessage?: string };
   getColors: () => PaymentSheetColors;
-  /** Persist the order snapshot + token. Must never mark it paid. */
-  recordOrder: (draft: OrderDraft, intent: PaymentIntentResult) => void;
+  /**
+   * Persist the order (snapshot, token, status pending_payment) BEFORE the sheet opens, so a charge can always be
+   * traced back to an order after a crash. Failures are swallowed: they must never block or fail a payment.
+   */
+  recordPending?: (draft: OrderDraft, intent: PaymentIntentResult) => void;
+  /** Mark the order confirmed (sheet success, or `remote` = what the server said). Must never mark it paid by itself. */
+  recordOrder: (draft: OrderDraft, intent: PaymentIntentResult, remote?: Order) => void;
+  /** Forget the pending order (explicit cancel/decline, init failure, server says cancelled/failed). */
+  discardPending?: (intent: PaymentIntentResult) => void;
+  /** GET /v1/orders/:id with the guest token. Without it an unclear sheet outcome can only end as `unconfirmed`. */
+  fetchOrder?: (intent: PaymentIntentResult, signal?: AbortSignal) => Promise<Order>;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+  pollIntervalMs?: number;
+  pollMaxAttempts?: number;
   /** From GET /v1/config. false blocks before any order is created. */
   paymentsEnabled?: () => boolean;
   makeKey?: () => string;
@@ -121,9 +140,22 @@ export function toCheckoutError(e: unknown): CheckoutError {
   return { kind: 'unknown', title: "We couldn't place that order", message: e.message, retryable: false };
 }
 
+const isPaid = (o: Order): boolean => o.paymentStatus === 'paid' || o.paymentStatus === 'refunded';
+
+/**
+ * 'declined': the sheet reported an explicit card decline (retry is safe, nothing charged).
+ * 'init': the sheet never opened. Everything else is unclear (network loss while confirming, SDK error,
+ * unknown code, timeout, exception): the PaymentIntent may have succeeded, so the server decides.
+ */
+export function classifyFailure(o: Extract<SheetOutcome, { kind: 'failed' }>): 'declined' | 'init' | 'unclear' {
+  if (o.code === 'InitFailed') return 'init';
+  if (o.declineCode !== undefined || o.errorType === 'card_error') return 'declined';
+  return 'unclear';
+}
+
 /**
  * The pay flow as a plain state machine (no React). `pay()` is re-entrancy safe: while a run is in
- * flight, further calls return the same promise. One Idempotency-Key + PaymentIntent is kept per
+ * flight, further calls resolve at once with the current (non-final) state. One Idempotency-Key + PaymentIntent is kept per
  * checkout attempt in memory; a NEW key is minted only when cart/contact/address/slot/promo change.
  * The client never marks anything paid.
  */
@@ -133,7 +165,8 @@ export function createCheckoutMachine(deps: CheckoutDeps) {
   const fmt = deps.formatPence ?? ((p: number) => `£${(p / 100).toFixed(2)}`);
   let state: CheckoutState = IDLE;
   let inFlight: Promise<CheckoutState> | null = null;
-  let session: { fingerprint: string; key: string; intent?: PaymentIntentResult } | null = null;
+  let session: { fingerprint: string; key: string; intent?: PaymentIntentResult; createdAt?: number; presented?: boolean } | null = null;
+  const now = deps.now ?? Date.now;
   const listeners = new Set<() => void>();
 
   const set = (next: CheckoutState): CheckoutState => {
@@ -162,20 +195,81 @@ export function createCheckoutMachine(deps: CheckoutDeps) {
     if (session?.fingerprint !== fingerprint) session = { fingerprint, key: makeKey() };
     const current = session;
 
+    const succeed = (intent: PaymentIntentResult): CheckoutState => {
+      session = null;
+      return set({
+        status: 'succeeded',
+        result: { orderNumber: intent.orderNumber, orderId: intent.orderId, pricing: intent.pricing, demo },
+      });
+    };
+    const discard = (intent: PaymentIntentResult) => {
+      try {
+        deps.discardPending?.(intent);
+      } catch {
+        /* best effort */
+      }
+    };
+    const confirm = (intent: PaymentIntentResult, remote?: Order) => {
+      try {
+        deps.recordOrder(draft, intent, remote);
+      } catch {
+        // The card is already charged: a local save failure must not be reported as a failed payment
+        // (a retry would only hit an already-paid PaymentIntent). The pending copy saved before the
+        // sheet and the launch reconciliation still find the order.
+      }
+    };
+    const check = (intent: PaymentIntentResult): Promise<Order | null> =>
+      deps.fetchOrder ? deps.fetchOrder(intent).catch(() => null) : Promise.resolve(null);
+
     try {
       set({ status: 'creating' });
+
+      // R8: never re-present an old or cancelled intent. A NEW attempt (new key) is minted transparently.
+      if (current.intent) {
+        const old = current.intent;
+        let fresh = now() - (current.createdAt ?? 0) <= MAX_INTENT_AGE_MS;
+        if (current.presented && deps.fetchOrder) {
+          // The sheet was shown before (cancel, decline, unclear end): ask the server first. It may be paid.
+          const remote = await check(old);
+          if (!remote) {
+            return fail({
+              kind: 'network',
+              title: "We couldn't check your payment",
+              message: "Check your connection and try again. You won't be charged twice.",
+              retryable: true,
+            });
+          }
+          if (isPaid(remote)) {
+            confirm(old, remote);
+            return succeed(old);
+          }
+          if (remote.status === 'cancelled') fresh = false;
+        }
+        if (!fresh) {
+          discard(old);
+          current.key = makeKey();
+          current.intent = undefined;
+          current.createdAt = undefined;
+          current.presented = false;
+        }
+      }
+
       let intent = current.intent;
       if (!intent) {
+        const create = () => deps.gateway.createPaymentIntent(draft, { idempotencyKey: current.key });
         try {
-          intent = await deps.gateway.createPaymentIntent(draft, { idempotencyKey: current.key });
+          intent = await create();
         } catch (e) {
-          // Same key reused with a different body (should not happen): mint a fresh key once.
-          if (isAppApiError(e) && e.code === 'idempotency_key_reuse') {
+          // Same key reused with a different body (should not happen) or a replay of a cancelled/expired
+          // checkout (409 checkout_expired): mint a fresh key once.
+          if (isAppApiError(e) && (e.code === 'idempotency_key_reuse' || e.code === 'checkout_expired')) {
             current.key = makeKey();
-            intent = await deps.gateway.createPaymentIntent(draft, { idempotencyKey: current.key });
+            intent = await create();
           } else throw e;
         }
         current.intent = intent;
+        current.createdAt = now();
+        current.presented = false;
       }
 
       if (opts?.expectedTotalPence !== undefined && intent.pricing.totalPence !== opts.expectedTotalPence) {
@@ -201,33 +295,99 @@ export function createCheckoutMachine(deps: CheckoutDeps) {
           city: draft.address.city,
           postcode: draft.address.postcode,
         };
-        const outcome = await deps.sheet.run({
-          clientSecret: intent.clientSecret,
-          billing,
-          colors: c,
-          onPresenting: () => set({ status: 'presenting' }),
-        });
-        if (outcome.kind === 'cancelled') return set({ status: 'cancelled' });
-        if (outcome.kind === 'failed') {
-          const declined = outcome.declineCode !== undefined || outcome.code === 'Failed';
-          return fail({
-            kind: declined ? 'declined' : 'payment',
-            title: "Payment didn't go through",
-            message: outcome.message,
-            retryable: true,
+        // R2: from here a charge is possible. Save the order first (best effort, never blocks the payment).
+        try {
+          deps.recordPending?.(draft, intent);
+        } catch {
+          /* the order can still be found by lookup, and the poll below needs no local copy */
+        }
+        current.presented = true;
+        let outcome: SheetOutcome;
+        try {
+          outcome = await deps.sheet.run({
+            clientSecret: intent.clientSecret,
+            billing,
+            colors: c,
+            onPresenting: () => set({ status: 'presenting' }),
           });
+        } catch (e) {
+          // Anything thrown around the sheet is NOT proof that nothing was charged.
+          outcome = { kind: 'failed', message: e instanceof Error ? e.message : 'Payment sheet error', code: 'Exception' };
+        }
+
+        if (outcome.kind === 'cancelled') {
+          discard(intent);
+          return set({ status: 'cancelled' });
+        }
+        if (outcome.kind === 'failed') {
+          const kind = classifyFailure(outcome);
+          if (kind === 'declined') {
+            discard(intent);
+            return fail({ kind: 'declined', title: "Payment didn't go through", message: outcome.message, retryable: true });
+          }
+          if (kind === 'init') {
+            // The sheet never opened: nothing was charged. Raw SDK text can be developer-facing, so it is not shown.
+            discard(intent);
+            return fail({
+              kind: 'payment',
+              title: "Payment didn't start",
+              message: "We couldn't open the payment sheet. Nothing was charged. Please try again.",
+              retryable: true,
+            });
+          }
+          // Unclear outcome: the PaymentIntent may well have succeeded. Ask the server (30 s) before saying anything.
+          return verify(intent);
         }
       }
 
       set({ status: 'confirming' });
-      deps.recordOrder(draft, intent);
-      session = null;
-      return set({
-        status: 'succeeded',
-        result: { orderNumber: intent.orderNumber, orderId: intent.orderId, pricing: intent.pricing, demo },
-      });
+      confirm(intent);
+      return succeed(intent);
     } catch (e) {
       return fail(toCheckoutError(e));
+    }
+
+    async function verify(intent: PaymentIntentResult): Promise<CheckoutState> {
+      if (!deps.fetchOrder) return unconfirmed(intent);
+      set({ status: 'verifying' });
+      const fetchOrder = deps.fetchOrder;
+      const outcome = await pollOrderPayment({
+        fetchOrder: (signal) => fetchOrder(intent, signal),
+        sleep: deps.sleep,
+        intervalMs: deps.pollIntervalMs ?? POLL_INTERVAL_MS,
+        maxAttempts: deps.pollMaxAttempts ?? POLL_MAX_ATTEMPTS,
+        isSettled: (o) => o.paymentStatus !== 'pending' || o.status === 'cancelled',
+      });
+      if (outcome.kind === 'settled') {
+        const remote = outcome.order;
+        if (isPaid(remote)) {
+          set({ status: 'confirming' });
+          confirm(intent, remote);
+          return succeed(intent);
+        }
+        // The server itself says failed / cancelled: the only case besides cancel/decline reported as a failure.
+        discard(intent);
+        if (remote.status === 'cancelled' && session) {
+          session.intent = undefined; // next tap starts a new attempt
+          session.key = makeKey();
+          session.presented = false;
+        }
+        return fail({
+          kind: 'payment',
+          title: "Payment didn't go through",
+          message: 'Your card was not charged. Please try again.',
+          retryable: true,
+        });
+      }
+      return unconfirmed(intent);
+    }
+
+    function unconfirmed(intent: PaymentIntentResult): CheckoutState {
+      // Keep the pending order and the intent: the next tap re-checks the server before showing the sheet again.
+      return set({
+        status: 'unconfirmed',
+        result: { orderNumber: intent.orderNumber, orderId: intent.orderId, pricing: intent.pricing, demo },
+      });
     }
   }
 
@@ -241,7 +401,9 @@ export function createCheckoutMachine(deps: CheckoutDeps) {
       };
     },
     pay(draft: OrderDraft, opts?: PayOptions): Promise<CheckoutState> {
-      if (inFlight) return inFlight;
+      // A re-entrant call (double tap in the same frame) gets a snapshot, not the run's own promise, so the
+      // caller's success/failure handling (clear cart, navigate, alert) runs exactly once.
+      if (inFlight) return Promise.resolve(state);
       const p = run(draft, opts).finally(() => {
         inFlight = null;
       });

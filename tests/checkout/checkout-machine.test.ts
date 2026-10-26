@@ -56,8 +56,9 @@ describe('checkout machine', () => {
   it('double-tap pay() shares one run (one intent, one sheet)', async () => {
     const { m, create, run } = setup();
     const [a, b] = [m.pay(draft()), m.pay(draft())];
-    expect(a).toBe(b);
-    await a;
+    expect(a).not.toBe(b); // the duplicate resolves immediately with a non-final snapshot
+    expect((await b).status).toBe('creating');
+    expect((await a).status).toBe('succeeded');
     expect(create).toHaveBeenCalledTimes(1);
     expect(run).toHaveBeenCalledTimes(1);
   });

@@ -2,6 +2,7 @@ import type { Address, Order as ApiOrder, PricedLine, Pricing, Slot, OrderStatus
 import type { StoredOrder } from '../../store/orders';
 import type { OrderStatus } from '../../types';
 import { formatSlotLabel } from '../checkout/slots';
+import { toDisplayName } from '@/data/merge';
 
 const pounds = (p: number) => Math.round(p) / 100;
 
@@ -23,7 +24,7 @@ export function toLocalStatus(s: ApiStatus, fallback: OrderStatus = 'placed'): O
 }
 
 export function linesFromApi(lines: PricedLine[]): StoredOrder['lines'] {
-  return lines.map((l) => ({ productId: l.productId, name: l.name, price: pounds(l.unitPricePence), quantity: l.quantity, image: l.image ?? '' }));
+  return lines.map((l) => ({ productId: l.productId, name: toDisplayName(l.name), price: pounds(l.unitPricePence), quantity: l.quantity, image: l.image ?? '' }));
 }
 
 export function totalsFromApi(p: Pricing) {

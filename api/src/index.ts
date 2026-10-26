@@ -16,6 +16,12 @@ const server = serve({ fetch: createProductionApp(runtime, process.env['GIT_COMM
   logger.info({ port: info.port, env: config.nodeEnv }, 'api listening');
 });
 
+// Node's defaults allow a client to hold a connection for minutes while dripping a request (slowloris).
+if ('requestTimeout' in server) {
+  server.requestTimeout = 30_000;
+  server.headersTimeout = 15_000;
+}
+
 let shuttingDown = false;
 function shutdown(signal: string): void {
   if (shuttingDown) return;

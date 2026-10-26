@@ -103,6 +103,17 @@ export default function CheckoutScreen() {
       setDone(true);
       disablePrevention();
       router.replace({ pathname: '/order/[id]', params: { id: res.result.orderNumber } });
+    } else if (res.status === 'unconfirmed') {
+      // Unclear sheet outcome and the server still says pending after ~30 s. Neither "paid" nor "failed":
+      // the cart is kept, the pending order is kept, and Check Again asks the server before showing the sheet.
+      Alert.alert(
+        "We're still confirming your payment",
+        "We haven't had an answer from your bank yet. If you were charged you won't be charged again, and the order will appear in Orders once it is confirmed.",
+        [
+          { text: 'Close', style: 'cancel' },
+          { text: 'Check Again', onPress: () => retry.current() },
+        ],
+      );
     } else if (res.status === 'failed' && res.error) {
       const err = res.error;
       if (err.kind === 'price_changed' || err.returnToCart) quote.refresh();
@@ -180,7 +191,7 @@ export default function CheckoutScreen() {
     : !checkout.sheetAvailable
       ? (checkout.sheetUnavailableMessage ?? 'Card payments need the mobile app')
       : 'Secured by Stripe · Apple Pay accepted';
-  const label = busy ? 'Processing' : 'Pay';
+  const label = checkout.state.status === 'verifying' ? 'Confirming payment' : busy ? 'Processing' : 'Pay';
 
   return (
     <View style={[styles.root, { backgroundColor: c.groupedBackground }]}>

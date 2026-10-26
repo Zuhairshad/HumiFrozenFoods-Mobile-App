@@ -53,7 +53,7 @@ export function createHttpStripeGateway(client: HttpClient): StripeGateway {
         retry: { retries: 2, baseDelayMs: 500 },
         timeoutMs: 20000,
       });
-      if (!res?.clientSecret || !res.orderId || !res.guestToken || !res.pricing) {
+      if (!res?.clientSecret || !res.orderId || !res.orderNumber || !res.guestToken || !res.pricing || !Array.isArray(res.lines)) {
         throw new AppApiError({ status: 200, code: 'invalid_response', message: 'Unexpected response from the server.' });
       }
       return { ...res, demo: false };

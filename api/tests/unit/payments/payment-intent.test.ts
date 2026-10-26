@@ -137,49 +137,74 @@ describe('POST /v1/checkout/payment-intent', () => {
       expect((await errorBody(res)).error.code).toBe('internal_error');
     });
 
-    it('resolves a concurrent duplicate: replays the winner and cancels its own order and intent', async () => {
+    it('10 parallel requests with one key create exactly one order, intent and claim; the rest replay it', async () => {
       const h = buildHarness();
-      const winnerOrder = h.orders.seed({ orderId: 'f'.repeat(24), paymentIntentId: 'pi_winner', pricing: pricingFor(2599) });
-      // The winner's request hash must equal ours, so compute it via a first dry run against a throwaway harness.
-      const probe = buildHarness();
-      await post(probe, body());
-      const winnerRecord = {
-        ...(probe.idempotency.records.get(sha256(KEY)) ?? (() => { throw new Error('no probe record'); })()),
-        response: {
-          orderId: winnerOrder.orderId,
-          orderNumber: winnerOrder.orderNumber,
-          clientSecret: 'pi_winner_secret_x',
-          pricing: winnerOrder.pricing,
-          lines: [],
-        },
-      };
-      h.idempotency.raceWinner = winnerRecord;
-
-      const res = await post(h, body());
-      expect(res.status).toBe(200);
-      expect(res.headers.get('Idempotent-Replay')).toBe('true');
-      expect(((await res.json()) as Created).orderId).toBe(winnerOrder.orderId);
-      const mine = [...h.orders.orders.values()].find((o) => o.orderId !== winnerOrder.orderId);
-      expect(mine?.siteOrderStatus).toBe('order-cancelled');
-      expect(h.gateway.intents.get('pi_fake_000001')?.status).toBe('canceled');
-      expect(h.orders.orders.get(winnerOrder.orderId)?.siteOrderStatus).toBe('order-pending');
+      const responses = await Promise.all(Array.from({ length: 10 }, async () => post(h, body())));
+      const statuses = responses.map((r) => r.status).sort();
+      expect(statuses.filter((s) => s === 201)).toHaveLength(1);
+      expect(statuses.filter((s) => s === 200)).toHaveLength(9);
+      const bodies = (await Promise.all(responses.map((r) => r.json()))) as Created[];
+      expect(new Set(bodies.map((b) => b.orderId)).size).toBe(1);
+      expect(new Set(bodies.map((b) => b.clientSecret)).size).toBe(1);
+      expect(h.orders.orders.size).toBe(1);
+      expect(h.gateway.intents.size).toBe(1);
+      expect(h.idempotency.claims).toBe(1);
+      expect([...h.orders.orders.values()][0]?.siteOrderStatus).toBe('order-pending');
+      for (const r of responses.filter((x) => x.status === 200)) expect(r.headers.get('Idempotent-Replay')).toBe('true');
     });
 
-    it('answers 409 when the concurrent winner used a different body', async () => {
+    it('answers 409 idempotency_key_reuse, with no order, when a live claim holds a different body', async () => {
       const h = buildHarness();
-      h.idempotency.raceWinner = { keyHash: sha256(KEY), requestHash: 'different', response: {}, status: 201, createdAt: NOW };
+      await h.idempotency.claim(sha256(KEY), 'different', NOW);
       const res = await post(h, body());
       expect(res.status).toBe(409);
       expect((await errorBody(res)).error.code).toBe('idempotency_key_reuse');
-      expect([...h.orders.orders.values()].every((o) => o.siteOrderStatus === 'order-cancelled')).toBe(true);
+      expect(h.orders.orders.size).toBe(0);
     });
 
-    it('answers 409 conflict if the race winner cannot be found afterwards', async () => {
-      const h = buildHarness();
-      vi.spyOn(h.idempotency, 'save').mockResolvedValue(false);
+    it('answers 409 conflict with Retry-After if the winner is still in progress after the wait bound', async () => {
+      const h = buildHarness({ checkout: { pollIntervalMs: 5, maxWaitMs: 30 } });
+      const probe = buildHarness();
+      await post(probe, body());
+      const requestHash = probe.idempotency.records.get(sha256(KEY))?.requestHash ?? '';
+      await h.idempotency.claim(sha256(KEY), requestHash, NOW);
       const res = await post(h, body());
       expect(res.status).toBe(409);
       expect((await errorBody(res)).error.code).toBe('conflict');
+      expect(res.headers.get('Retry-After')).toBe('2');
+      expect(h.orders.orders.size).toBe(0);
+    });
+
+    it('takes over a stale in-progress claim (older than 60 s)', async () => {
+      const h = buildHarness();
+      await h.idempotency.claim(sha256(KEY), 'old-hash', new Date(NOW.getTime() - 61_000));
+      const res = await post(h, body());
+      expect(res.status).toBe(201);
+    });
+
+    it('a loser proceeds on its own when the winner fails and releases the claim', async () => {
+      const h = buildHarness();
+      h.orders.failNext('insertPending');
+      const [a, b] = await Promise.all([post(h, body()), post(h, body())]);
+      expect([a.status, b.status].sort()).toEqual([201, 500]);
+      expect(h.orders.orders.size).toBe(1);
+    });
+
+    it('conflicts rather than replaying when the claim is lost before completing', async () => {
+      const h = buildHarness();
+      vi.spyOn(h.idempotency, 'complete').mockResolvedValue(false);
+      const res = await post(h, body());
+      expect(res.status).toBe(409);
+      expect([...h.orders.orders.values()][0]?.siteOrderStatus).toBe('order-cancelled');
+      expect(h.gateway.intents.get('pi_fake_000001')?.status).toBe('canceled');
+    });
+
+    it('still releases the claim if releasing logs a failure', async () => {
+      const h = buildHarness();
+      h.orders.failNext('insertPending');
+      vi.spyOn(h.idempotency, 'release').mockRejectedValue(new Error('mongo down'));
+      expect((await post(h, body())).status).toBe(500);
+      expect(h.logs.text()).toContain('could not release idempotency claim');
     });
   });
 
@@ -334,7 +359,7 @@ describe('POST /v1/checkout/payment-intent', () => {
       expect(orders).toHaveLength(1);
       expect(orders[0]).toMatchObject({ siteOrderStatus: 'order-cancelled', sitePaymentStatus: 'payment-failed' });
       expect(await failing.orders.findStalePending(new Date('2100-01-01'), 10)).toHaveLength(0);
-      expect(failing.idempotency.records.size).toBe(0);
+      expect(failing.idempotency.records.size).toBe(0); // claim released
       expect(failing.orders.transitions[0]?.transition).toEqual({ kind: 'cancelled', paymentIntentId: 'pi_none' });
     });
 
@@ -376,7 +401,7 @@ describe('POST /v1/checkout/payment-intent', () => {
 
     it('cancels everything when saving the idempotency record fails', async () => {
       const h = buildHarness();
-      h.idempotency.failSave = new Error('mongo down');
+      h.idempotency.failComplete = new Error('mongo down');
       const res = await post(h, body());
       expect(res.status).toBe(500);
       expect([...h.orders.orders.values()][0]?.siteOrderStatus).toBe('order-cancelled');
@@ -393,9 +418,9 @@ describe('POST /v1/checkout/payment-intent', () => {
 
     it('a retry after a failed attempt gets a brand new intent, never a cancelled one', async () => {
       const h = buildHarness();
-      h.idempotency.failSave = new Error('mongo down');
+      h.idempotency.failComplete = new Error('mongo down');
       await post(h, body());
-      h.idempotency.failSave = undefined;
+      h.idempotency.failComplete = undefined;
       const res = await post(h, body());
       expect(res.status).toBe(201);
       const created = (await res.json()) as Created;

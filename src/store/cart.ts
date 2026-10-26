@@ -6,6 +6,8 @@ import { migrateCartState } from '@/data/id-migration';
 
 export const MIN_QTY = 1;
 export const MAX_QTY = 20;
+/** Contract limit: the server rejects a basket with more than 30 distinct lines. */
+export const MAX_LINES = 30;
 
 const clamp = (n: number) => Math.min(MAX_QTY, Math.max(MIN_QTY, Math.floor(n)));
 
@@ -38,6 +40,7 @@ export const useCartStore = create<CartState>()(
               ),
             };
           }
+          if (s.lines.length >= MAX_LINES) return s;
           return { lines: [...s.lines, { productId, quantity: clamp(qty) }] };
         });
       },

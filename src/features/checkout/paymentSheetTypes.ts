@@ -24,7 +24,15 @@ export interface PaymentSheetBilling {
 export type SheetOutcome =
   | { kind: 'success' }
   | { kind: 'cancelled' }
-  | { kind: 'failed'; message: string; code?: string; declineCode?: string };
+  | {
+      kind: 'failed';
+      message: string;
+      /** PaymentSheetError code ('Failed' | 'Canceled' | 'Timeout'), or 'InitFailed' (sheet never opened). */
+      code?: string;
+      declineCode?: string;
+      /** Stripe error type, e.g. 'card_error' (an explicit decline). */
+      errorType?: string;
+    };
 
 export interface PaymentSheetAdapter {
   /** False on web / when no publishable key is configured. */

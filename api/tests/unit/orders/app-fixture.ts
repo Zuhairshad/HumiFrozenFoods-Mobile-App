@@ -28,7 +28,7 @@ export function buildOrdersApp(options: OrdersAppOptions) {
     clock: { now: () => NOW },
     products: { list: unused, findByIdOrSlug: unused, findManyBySlugs: unused, countByCollection: unused },
     orders: options.orders,
-    idempotency: { find: unused, save: unused },
+    idempotency: { find: unused, save: unused, claim: unused, complete: unused, release: unused },
     enquiries: { insert: unused },
     webhookEvents: { recordIfNew: unused },
     payments: {

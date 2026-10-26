@@ -108,15 +108,19 @@ export function createQuoteController(deps: QuoteControllerDeps) {
     },
     /** Schedule a quote for `req` (debounced). Empty carts reset to idle immediately. */
     update(req: QuoteRequest) {
-      if (handle !== undefined) ct(handle);
-      handle = undefined;
       if (req.lines.length === 0) {
+        if (handle !== undefined) ct(handle);
+        handle = undefined;
         abort?.abort();
         current = null;
         dispatch({ type: 'empty' });
         return;
       }
-      if (current && quoteKey(current) === quoteKey(req) && state.status !== 'error') return;
+      // Same basket again (e.g. a re-render with a new array identity): keep whatever is already pending
+      // or loaded. Clearing the timer here would silently drop the fetch that is about to run.
+      if (current && quoteKey(current) === quoteKey(req) && (handle !== undefined || state.status !== 'error')) return;
+      if (handle !== undefined) ct(handle);
+      handle = undefined;
       current = req;
       handle = st(() => {
         handle = undefined;

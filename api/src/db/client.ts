@@ -25,6 +25,9 @@ const CLIENT_OPTIONS: MongoClientOptions = {
   serverSelectionTimeoutMS: 5_000,
   connectTimeoutMS: 5_000,
   socketTimeoutMS: 30_000,
+  // Client-side operation deadline: the driver also sends it as maxTimeMS, so a runaway scan on the owner's
+  // (possibly unindexed) collections is aborted server-side instead of piling up behind request timeouts.
+  timeoutMS: 8_000,
   appName: 'humis-api',
   serverApi: { version: ServerApiVersion.v1 },
 };

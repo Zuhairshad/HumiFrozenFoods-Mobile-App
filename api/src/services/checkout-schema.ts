@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { hasForbiddenText } from '../lib/text-policy.js';
 
 const MAX_LINES = 30;
 const MAX_PER_PRODUCT = 20;
@@ -6,15 +7,17 @@ const MAX_PER_PRODUCT = 20;
 // Unicode Cc: C0/C1 controls and DEL. Newlines are rejected too (contract: control characters rejected).
 const CONTROL_CHARS = /\p{Cc}/u;
 
-const text = (max: number, min = 1) =>
+// Names and addresses are strict (no zero-width, bidi or format characters); notes may carry ZWJ emoji.
+const text = (max: number, min = 1, zwjEmoji = false) =>
   z
     .string()
     .trim()
     .min(min)
     .max(max)
-    .refine((value) => !CONTROL_CHARS.test(value), 'Contains invalid characters');
+    .refine((value) => !CONTROL_CHARS.test(value) && !hasForbiddenText(value, { zwjEmoji }), 'Contains invalid characters');
 
-const optionalText = (max: number) => text(max, 0).transform((value) => (value === '' ? undefined : value)).optional();
+const optionalText = (max: number, zwjEmoji = false) =>
+  text(max, 0, zwjEmoji).transform((value) => (value === '' ? undefined : value)).optional();
 
 // Royal Mail format: outward code (A9, A99, AA9, AA99, A9A, AA9A) + inward code (9AA); GIR 0AA is the special case.
 const UK_POSTCODE =
@@ -86,7 +89,7 @@ export const paymentIntentBodySchema = z
     contact: contactSchema,
     address: addressSchema,
     slot: slotSchema,
-    notes: optionalText(300),
+    notes: optionalText(300, true),
   })
   .superRefine((body, ctx) => {
     const totals = new Map<string, number>();
