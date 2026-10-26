@@ -302,6 +302,6 @@ describe('identity, text and urls', () => {
 
   it('ignores extra hostile fields entirely', () => {
     const record = ok(base({ b2b_pricing: { price: 1 }, sku: 'S', __v: 3, status: 'publish', $where: '1', constructor: 'x' }));
-    expect(JSON.stringify(toPublicProduct(record))).not.toMatch(/b2b|"sku"|__v|\$where/);
+    expect(JSON.stringify(toPublicProduct(record))).not.toMatch(/b2b_|"sku"|"__v"|\$where/);
   });
 });

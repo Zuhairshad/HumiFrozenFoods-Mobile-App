@@ -205,7 +205,7 @@ describe('createMongoProductsRepository.list', () => {
     const warnings = logs.lines().filter((l) => l['msg'] === 'skipping malformed product document');
     expect(warnings).toHaveLength(3);
     expect(warnings.find((w) => w['productId'] === bad.toHexString())).toMatchObject({ reason: 'missing or non-URL-safe slug' });
-    expect(logs.text()).not.toContain('b2b');
+    expect(logs.text()).not.toContain('b2b_');
   });
 
   it('stops paging cleanly at a document whose _id is not an ObjectId', async () => {
@@ -342,6 +342,6 @@ describe('catalogRoutes over the real repository', () => {
 
   it('exposes nothing from the sensitive fixture fields', async () => {
     const text = await (await app().request('/v1/products?limit=100')).text();
-    expect(text).not.toMatch(/b2b|tier_prices|sold_quantity|"sku"|__v|"quantity"|"stock"|"status"|"visibility"|promotional_sliders/);
+    expect(text).not.toMatch(/b2b_|tier_prices|sold_quantity|"sku"|"__v"|"quantity"|"stock"|"status"|"visibility"|promotional_sliders/);
   });
 });

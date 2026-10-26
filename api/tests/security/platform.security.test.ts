@@ -80,7 +80,7 @@ describe('data exposure', () => {
       expect(r.text, r.name).not.toMatch(/pi_fake_|_secret_|mongodb(\+srv)?:\/\/|sk_(test|live)|whsec_|node_modules|at .*\(.*:\d+:\d+\)|MongoServerError/);
     }
     const livePrices = JSON.stringify(responses.find((r) => r.name === 'products')?.json);
-    expect(livePrices).not.toContain('"b2b');
+    expect(livePrices).not.toContain('"b2b_');
     expect(JSON.stringify(order)).not.toContain(placed.clientSecret);
   });
 

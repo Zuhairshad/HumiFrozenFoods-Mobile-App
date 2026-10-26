@@ -10,7 +10,10 @@ export const ALWAYS_FORBIDDEN_KEYS = ['b2b_pricing', 'sold_quantity', 'sku', '__
 /** Extra keys forbidden on catalogue-style responses (an order line legitimately has `quantity`). */
 export const CATALOGUE_FORBIDDEN_KEYS = ['quantity', 'status', 'visibility', 'type', 'type_slug', 'banners', 'promotional_sliders', 'shop', 'seller'];
 
-const FORBIDDEN_SUBSTRINGS = ['b2b', 'sold_quantity', '__v', 'tier_prices', 'product_details'];
+// Needles must be impossible to hit by chance in random hex ids (ObjectIds) or base64url tokens, which are
+// regenerated every run: bare 'b2b' is valid hex and '__v' is valid base64url, so both are matched only as
+// the quoted JSON key or with an underscore that hex cannot contain.
+const FORBIDDEN_SUBSTRINGS = ['b2b_', '"__v"', 'sold_quantity', 'tier_prices', 'product_details'];
 
 export interface LeakScanOptions {
   /** Add the catalogue-only key list. */
