@@ -63,6 +63,32 @@ describe('guest tokens', () => {
       }
     });
 
+    it('rejects every non-canonical spelling of a valid signature (padding bits and "=" padding)', () => {
+      const { service } = setup();
+      let equivalentSpellings = 0;
+      for (let i = 0; i < 40; i++) {
+        const orderId = `507f1f77bcf86cd7994390${String(10 + i)}`;
+        const token = service.issue(orderId).token;
+        const macStart = token.lastIndexOf('.') + 1;
+        const mac = token.slice(macStart);
+        const realBytes = Buffer.from(mac, 'base64url');
+        expect(service.verify(token, orderId)).toMatchObject({ ok: true });
+
+        for (const c of 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_') {
+          if (c === mac.at(-1)) continue;
+          const spelling = mac.slice(0, -1) + c;
+          // Only spellings that decode to the SAME bytes are interesting: they carry a genuine signature.
+          if (!Buffer.from(spelling, 'base64url').equals(realBytes)) continue;
+          equivalentSpellings++;
+          expect(service.verify(token.slice(0, macStart) + spelling, orderId)).toEqual({ ok: false, reason: 'bad_signature' });
+        }
+        expect(service.verify(`${token}=`, orderId)).toEqual({ ok: false, reason: 'bad_signature' });
+        expect(service.verify(`${token}==`, orderId)).toEqual({ ok: false, reason: 'bad_signature' });
+      }
+      // 43 base64url chars carry 258 bits for a 256-bit MAC, so 3 alternative final characters exist per token.
+      expect(equivalentSpellings).toBe(40 * 3);
+    });
+
     it('detects signature edits and truncation', () => {
       const { service } = setup();
       const token = service.issue(ORDER).token;

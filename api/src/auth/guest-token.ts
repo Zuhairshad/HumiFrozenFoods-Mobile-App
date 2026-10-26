@@ -79,7 +79,13 @@ export function createGuestTokenService(options: GuestTokenOptions): GuestTokenS
       const expected = keyring.hmac(kid, `${version}.${kid}.${encodedPayload}`);
       if (!expected) return fail('unknown_kid');
       const provided = Buffer.from(encodedMac, 'base64url');
-      if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
+      // Node's decoder ignores padding bits and '=' padding, so several spellings decode to the same bytes.
+      // Accept only the canonical one: a token has exactly one valid form, which closes signature malleability.
+      if (
+        provided.length !== expected.length ||
+        provided.toString('base64url') !== encodedMac ||
+        !timingSafeEqual(provided, expected)
+      ) {
         return fail('bad_signature');
       }
 

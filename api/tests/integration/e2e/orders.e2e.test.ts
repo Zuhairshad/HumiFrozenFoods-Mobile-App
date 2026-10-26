@@ -84,7 +84,9 @@ describe('GET /v1/orders/:orderId', () => {
   it('401 for tampered, truncated, foreign-key, malformed and expired tokens', async () => {
     const created = await h.createOrder();
     const [version, kid, payload, mac] = created.guestToken.split('.') as [string, string, string, string];
-    const flippedMac = `${mac.slice(0, -1)}${mac.endsWith('A') ? 'B' : 'A'}`;
+    // Change the FIRST signature character (all 6 bits significant). Changing the last one is not a tamper:
+    // its low two bits are padding, so some "edits" decode to the very same signature.
+    const flippedMac = `${mac.startsWith('A') ? 'B' : 'A'}${mac.slice(1)}`;
     const forgedPayload = Buffer.from(JSON.stringify({ oid: created.orderId, scope: 'guest-order', iat: 0, exp: 9_999_999_999 })).toString('base64url');
     const tokens = [
       `${version}.${kid}.${payload}.${flippedMac}`,
