@@ -15,6 +15,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '@/components/ui/Toast';
 import { useReconcilePendingOrders, useStripeUrlForwarding } from '@/features/checkout';
 import { BrandSplash, useAppReady } from '@/features/shell';
+import { useLargeTitleHeaderOptions } from '@/features/shop/LargeTitleStack';
 import { AppStripeProvider } from '@/lib/stripe/StripeProvider';
 import { useCatalogSync } from '@/hooks/useProducts';
 import { useTheme } from '@/hooks/useTheme';
@@ -42,6 +43,8 @@ export default function RootLayout() {
 
 function AppShell() {
   const { c, isDark } = useTheme();
+  // Pushed screens set their own title; the root stack hides headers by default, so opt them back in.
+  const pushedHeader = useLargeTitleHeaderOptions();
   const reduced = useReducedMotion();
   const ready = useAppReady();
   // Start live data at launch (not per screen) so deep links to any route have data.
@@ -112,8 +115,8 @@ function AppShell() {
             options={{ gestureEnabled: false, animation: 'fade' }}
           />
           <Stack.Screen name="stripe-redirect" options={{ animation: 'none', gestureEnabled: false }} />
-          <Stack.Screen name="orders/index" />
-          <Stack.Screen name="orders/[id]" />
+          <Stack.Screen name="orders/index" options={pushedHeader} />
+          <Stack.Screen name="orders/[id]" options={pushedHeader} />
           <Stack.Screen
             name="orders/lookup"
             options={{
@@ -125,11 +128,11 @@ function AppShell() {
               contentStyle: { backgroundColor: c.groupedBackground },
             }}
           />
-          <Stack.Screen name="favorites" />
-          <Stack.Screen name="about" />
-          <Stack.Screen name="contact" />
-          <Stack.Screen name="b2b" />
-          <Stack.Screen name="sales-rep" />
+          <Stack.Screen name="favorites" options={pushedHeader} />
+          <Stack.Screen name="about" options={pushedHeader} />
+          <Stack.Screen name="contact" options={pushedHeader} />
+          <Stack.Screen name="b2b" options={pushedHeader} />
+          <Stack.Screen name="sales-rep" options={pushedHeader} />
         </Stack>
       </Animated.View>
       {splashDone ? null : <BrandSplash ready={ready} onExitStart={onExitStart} onDone={onDone} />}

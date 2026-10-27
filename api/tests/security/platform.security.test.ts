@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ObjectId } from 'mongodb';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
@@ -379,7 +380,7 @@ describe('production safety', () => {
   });
 
   it('keeps dev-only code (fake gateway, dev mock server) out of the production import graph', () => {
-    const root = new URL('../../src/', import.meta.url).pathname;
+    const root = fileURLToPath(new URL('../../src/', import.meta.url));
     const files: string[] = [];
     const walkDir = (dir: string): void => {
       for (const f of readdirSync(dir)) {
