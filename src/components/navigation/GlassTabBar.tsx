@@ -36,16 +36,57 @@ const PAD = 6;
 const SLOT_HEIGHT = CAPSULE_HEIGHT - PAD * 2; // 50
 const PILL_RADIUS = 25;
 
-const GLASS_TINT = 'rgba(8,24,25,0.52)';
-const GLASS_SOLID = 'rgba(14,27,27,0.94)';
-const STROKE = 'rgba(255,255,255,0.16)';
-const HIGHLIGHT = 'rgba(255,255,255,0.10)';
-const PILL_FILL = 'rgba(255,255,255,0.16)';
-const PILL_STROKE = 'rgba(255,255,255,0.10)';
-const ICON_ACTIVE = '#FFFFFF';
-const ICON_INACTIVE = 'rgba(255,255,255,0.62)';
+/**
+ * Frosted glass that follows the app theme, like the Instagram iOS 26 bar: a BlurView frosts
+ * whatever scrolls behind, Liquid Glass on top adds the rim and lensing. Dark icons in light
+ * mode, light icons in dark mode. Keep tints light: a heavy tint turns it into a solid slab.
+ */
+interface GlassPalette {
+  scheme: 'light' | 'dark';
+  tint: string;
+  blurTint: 'systemThinMaterialLight' | 'systemThinMaterialDark';
+  solid: string;
+  stroke: string;
+  highlight: string;
+  pillFill: string;
+  pillStroke: string;
+  iconActive: string;
+  iconInactive: string;
+  badgeBorder: string;
+}
+
+const LIGHT_GLASS: GlassPalette = {
+  scheme: 'light',
+  tint: 'rgba(255,255,255,0.18)',
+  blurTint: 'systemThinMaterialLight',
+  solid: 'rgba(250,250,248,0.97)',
+  stroke: 'rgba(14,27,27,0.10)',
+  highlight: 'rgba(255,255,255,0.70)',
+  pillFill: 'rgba(14,27,27,0.08)',
+  pillStroke: 'rgba(14,27,27,0.06)',
+  iconActive: '#0E1B1B',
+  iconInactive: 'rgba(14,27,27,0.62)',
+  badgeBorder: 'rgba(255,255,255,0.95)',
+};
+
+const DARK_GLASS: GlassPalette = {
+  scheme: 'dark',
+  tint: 'rgba(20,28,28,0.22)',
+  blurTint: 'systemThinMaterialDark',
+  solid: 'rgba(30,38,38,0.96)',
+  stroke: 'rgba(255,255,255,0.20)',
+  highlight: 'rgba(255,255,255,0.14)',
+  pillFill: 'rgba(255,255,255,0.16)',
+  pillStroke: 'rgba(255,255,255,0.10)',
+  iconActive: '#FFFFFF',
+  iconInactive: 'rgba(255,255,255,0.66)',
+  badgeBorder: 'rgba(8,24,25,0.9)',
+};
+
+/** Soft float shadow (light mode only; dark mode has no shadows, 2.5). Outset boxShadow
+ * is drawn outside the capsule, so it never darkens the glass itself. */
+const FLOAT_SHADOW = '0 8px 24px rgba(8,48,47,0.10)';
 const BADGE_FILL = '#C0392B';
-const BADGE_BORDER = 'rgba(8,24,25,0.9)';
 
 /** snappy spring (2.6) */
 const SNAPPY = { damping: 24, stiffness: 300, mass: 1 };
@@ -185,7 +226,7 @@ export function GlassTabBar({ state, descriptors, emitter, navigateToTab, insets
   );
 
   const solid = reduceTransparency || Platform.OS === 'android';
-  const showShadow = !isDark;
+  const palette = isDark ? DARK_GLASS : LIGHT_GLASS;
 
   return (
     <Animated.View
@@ -197,43 +238,43 @@ export function GlassTabBar({ state, descriptors, emitter, navigateToTab, insets
         style={[
           styles.capsule,
           { width: capsuleWidth },
-          showShadow && !glass && styles.shadow,
-          solid && { backgroundColor: GLASS_SOLID },
+          !isDark && { boxShadow: FLOAT_SHADOW },
+          solid && { backgroundColor: palette.solid },
         ]}
       >
         {/* Material layers */}
-        {glass && !reduceTransparency ? (
+        {/* Frost: blur whatever is behind the capsule. */}
+        {!solid ? (
+          <View style={[StyleSheet.absoluteFill, styles.rounded, styles.clip]} pointerEvents="none">
+            <BlurView tint={palette.blurTint} intensity={80} style={StyleSheet.absoluteFill} />
+            {!glass ? <View style={[StyleSheet.absoluteFill, { backgroundColor: palette.tint }]} /> : null}
+          </View>
+        ) : null}
+        {/* iOS 26: Liquid Glass over the frost for the specular rim and lensing. */}
+        {glass && !solid ? (
           <GlassView
             glassEffectStyle="regular"
             isInteractive
-            tintColor={GLASS_TINT}
-            colorScheme="dark"
+            tintColor={palette.tint}
+            colorScheme={palette.scheme}
             style={[StyleSheet.absoluteFill, styles.rounded]}
           />
-        ) : (
-          <>
-            {!solid ? (
-              <View style={[StyleSheet.absoluteFill, styles.rounded, styles.clip]} pointerEvents="none">
-                <BlurView
-                  tint="systemChromeMaterialDark"
-                  intensity={90}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: GLASS_TINT }]} />
-              </View>
-            ) : null}
-            <View
-              pointerEvents="none"
-              style={[StyleSheet.absoluteFill, styles.rounded, styles.stroke]}
-            />
-            <View pointerEvents="none" style={styles.highlight} />
-          </>
-        )}
+        ) : null}
+        {/* Rim + top highlight on every path, so the capsule edge reads on any background. */}
+        <View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, styles.rounded, styles.stroke, { borderColor: palette.stroke }]}
+        />
+        <View pointerEvents="none" style={[styles.highlight, { backgroundColor: palette.highlight }]} />
 
         {/* Active pill */}
         <Animated.View
           pointerEvents="none"
-          style={[styles.pill, { width: slotWidth }, pillStyle]}
+          style={[
+            styles.pill,
+            { width: slotWidth, backgroundColor: palette.pillFill, borderColor: palette.pillStroke },
+            pillStyle,
+          ]}
         />
 
         {/* Slots */}
@@ -250,6 +291,7 @@ export function GlassTabBar({ state, descriptors, emitter, navigateToTab, insets
                 label={accessibilityLabelFor(route.name, options.title, count)}
                 badge={route.name === 'cart' ? count : 0}
                 reducedMotion={reducedMotion}
+                palette={palette}
                 onPress={() => onPressTab(route.key, focused)}
                 onLongPress={() => onLongPressTab(route.key)}
               />
@@ -268,6 +310,7 @@ interface TabSlotProps {
   label: string;
   badge: number;
   reducedMotion: boolean;
+  palette: GlassPalette;
   onPress: () => void;
   onLongPress: () => void;
 }
@@ -279,6 +322,7 @@ function TabSlot({
   label,
   badge,
   reducedMotion,
+  palette,
   onPress,
   onLongPress,
 }: TabSlotProps) {
@@ -306,14 +350,28 @@ function TabSlot({
       style={[styles.slot, { width }]}
     >
       <Animated.View style={[styles.iconWrap, iconStyle]}>
-        <TabIcon routeName={routeName} focused={focused} color={focused ? ICON_ACTIVE : ICON_INACTIVE} />
-        {badge > 0 ? <CartBadge count={badge} reducedMotion={reducedMotion} /> : null}
+        <TabIcon
+          routeName={routeName}
+          focused={focused}
+          color={focused ? palette.iconActive : palette.iconInactive}
+        />
+        {badge > 0 ? (
+          <CartBadge count={badge} reducedMotion={reducedMotion} borderColor={palette.badgeBorder} />
+        ) : null}
       </Animated.View>
     </Pressable>
   );
 }
 
-function CartBadge({ count, reducedMotion }: { count: number; reducedMotion: boolean }) {
+function CartBadge({
+  count,
+  reducedMotion,
+  borderColor,
+}: {
+  count: number;
+  reducedMotion: boolean;
+  borderColor: string;
+}) {
   const scale = useSharedValue(1);
   const previous = useRef(count);
 
@@ -334,7 +392,7 @@ function CartBadge({ count, reducedMotion }: { count: number; reducedMotion: boo
       pointerEvents="none"
       accessible={false}
       importantForAccessibility="no-hide-descendants"
-      style={[styles.badge, style]}
+      style={[styles.badge, { borderColor }, style]}
     >
       <Text allowFontScaling={false} style={styles.badgeText}>
         {count > 9 ? '9+' : String(count)}
@@ -356,23 +414,15 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
     padding: PAD,
   },
-  shadow: {
-    shadowColor: '#08302F',
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
-  },
   rounded: { borderRadius: CAPSULE_RADIUS, borderCurve: 'continuous' },
   clip: { overflow: 'hidden' },
-  stroke: { borderWidth: StyleSheet.hairlineWidth, borderColor: STROKE },
+  stroke: { borderWidth: StyleSheet.hairlineWidth },
   highlight: {
     position: 'absolute',
     top: 0,
     left: 14,
     right: 14,
     height: 1,
-    backgroundColor: HIGHLIGHT,
   },
   pill: {
     position: 'absolute',
@@ -381,9 +431,7 @@ const styles = StyleSheet.create({
     height: SLOT_HEIGHT,
     borderRadius: PILL_RADIUS,
     borderCurve: 'continuous',
-    backgroundColor: PILL_FILL,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: PILL_STROKE,
   },
   row: { flexDirection: 'row', height: SLOT_HEIGHT },
   slot: { height: SLOT_HEIGHT, alignItems: 'center', justifyContent: 'center' },
@@ -398,7 +446,6 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     backgroundColor: BADGE_FILL,
     borderWidth: 2,
-    borderColor: BADGE_BORDER,
     alignItems: 'center',
     justifyContent: 'center',
   },

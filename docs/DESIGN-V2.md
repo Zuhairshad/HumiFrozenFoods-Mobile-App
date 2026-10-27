@@ -190,23 +190,20 @@ Five icon-only tabs in this order: **Home, Shop, Search, Cart, Account**. Custom
 - No labels (VoiceOver labels only, 3.9).
 
 ### 3.3 Active-tab pill
-- A single `Animated.View` behind the icons: slot size (68 x 50), radius 25 continuous, fill `rgba(255,255,255,0.16)` plus 0.5 pt inner stroke `rgba(255,255,255,0.10)`. This reads as the "lighter pill" in the reference.
+- A single `Animated.View` behind the icons: slot size (68 x 50), radius 25 continuous, 0.5 pt inner stroke. Dark: fill `rgba(255,255,255,0.16)`, stroke `rgba(255,255,255,0.10)` (the "lighter pill" in the reference). Light: fill `rgba(14,27,27,0.08)`, stroke `rgba(14,27,27,0.06)`.
 - It slides to the active slot with the `snappy` spring (translateX). While sliding, scaleX stretches to 1.08 at mid-travel (interpolate over distance) then returns; omit if reduced motion.
-- Active icon: filled variant, `#FFFFFF`. Inactive icon: outline variant, `rgba(255,255,255,0.62)` (contrast >= 8:1 against glassTint over black; against light photography the glass tint keeps >= 4.5:1).
+- Active icon: filled variant. Inactive icon: outline variant. Dark: `#FFFFFF` / `rgba(255,255,255,0.66)`. Light: `#0E1B1B` / `rgba(14,27,27,0.62)`. (White icons in light mode vanished over light photography; owner feedback 2026-10-26.)
 - Tap: icon scale 0.88 on press-in, spring back, `haptics.selection()`. Re-tapping the active tab scrolls that screen to top (and pops its stack to root).
 
 ### 3.4 Glass recipe
-Both light and dark mode use the **same dark glass** (the reference is a dark capsule on dark UI; in light mode it becomes a deliberate dark brand object, like the Apple Music mini-player in dark). 
-1. iOS 26+ with `isLiquidGlassAvailable()`: `GlassView` (regular, interactive) with `tintColor: glassTint`, `style: borderCurve continuous, radius 31`. No extra blur layer, no extra border (the system draws the specular rim).
-2. iOS < 26 / Android 12+ / web: layered fallback
-   a. `BlurView` `tint = systemChromeMaterialDark`, `intensity = 90`, clipped to the capsule;
-   b. overlay `View` filled `glassTint` (`rgba(8,24,25,0.52)`);
-   c. 0.5 pt border `rgba(255,255,255,0.16)`; plus a 1 pt top highlight line `rgba(255,255,255,0.10)` inset 14 pt from the sides;
-   d. `shadows.float` (light mode only).
-3. Android without blur support or `AccessibilityInfo.isReduceTransparencyEnabled()` true: solid `glassSolid` with the same stroke.
+The glass **follows the app theme**, like the Instagram iOS 26 bar (owner feedback 2026-10-26 replaced the earlier "same dark glass in both modes" rule: the 0.52 dark tint read as a solid slab on dark UI and the capsule vanished on light UI). Values live in `LIGHT_GLASS` / `DARK_GLASS` in `GlassTabBar.tsx`.
+1. Frost on every non-solid path: `BlurView` (`systemThinMaterialLight` / `systemThinMaterialDark`, intensity 80) clipped to the capsule, so content behind is blurred, not just seen through (`clear` glass was too transparent).
+2. iOS 26+ with `isLiquidGlassAvailable()`: `GlassView` (regular, interactive) on top of the frost for rim and lensing, `colorScheme` = app theme, tint light `rgba(255,255,255,0.18)` / dark `rgba(20,28,28,0.22)`, `style: borderCurve continuous, radius 31`. iOS < 26 / web: the same tint as a plain overlay instead of the GlassView.
+3. Android, or `AccessibilityInfo.isReduceTransparencyEnabled()` true: solid fill (light `rgba(250,250,248,0.97)`, dark `rgba(30,38,38,0.96)`).
+4. All paths: 0.5 pt rim (light `rgba(14,27,27,0.10)`, dark `rgba(255,255,255,0.20)`) and a 1 pt top highlight inset 14 pt, so the edge reads on any background. Light mode adds an outset `boxShadow` `0 8px 24px rgba(8,48,47,0.10)` (outset, so it never darkens the glass); dark mode has no shadow (2.5).
 
 ### 3.5 Cart badge
-On the Cart icon, top-right of the icon: circle min 18 x 18 (grows to a capsule for 2 digits), offset (+9, -9) from the icon centre, fill `destructive #C0392B`, text `#FFFFFF` `caption2` 11/13 weight 600 tabular, border 2 pt in `rgba(8,24,25,0.9)` to separate it from the capsule. Shows `count` up to 9, then "9+". Hidden at 0. When `count` increases: `bouncy` scale 1 to 1.35 to 1 plus `haptics.light`. VoiceOver label includes the count.
+On the Cart icon, top-right of the icon: circle min 18 x 18 (grows to a capsule for 2 digits), offset (+9, -9) from the icon centre, fill `destructive #C0392B`, text `#FFFFFF` `caption2` 11/13 weight 600 tabular, border 2 pt to separate it from the capsule (dark `rgba(8,24,25,0.9)`, light `rgba(255,255,255,0.95)`). Shows `count` up to 9, then "9+". Hidden at 0. When `count` increases: `bouncy` scale 1 to 1.35 to 1 plus `haptics.light`. VoiceOver label includes the count.
 
 ### 3.6 Scroll behaviour and content insets
 - The bar does NOT hide on scroll (matches the reference and keeps the 1-tap tab switch; Apple's own bar minimises only when opted in).
